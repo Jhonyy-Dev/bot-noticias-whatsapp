@@ -238,14 +238,17 @@ async function initializeWhatsApp() {
                 user: connectedUser 
               });
 
-              // Enviar primer YouTube Short al conectarse
+              // Enviar primer YouTube Short inmediatamente al conectarse
+              console.log('🚀 Enviando primer video inmediatamente después de la conexión...');
               setTimeout(async () => {
                 try {
-                  await sendYouTubeShort();
+                  console.log('⏰ Ejecutando primer envío de video...');
+                  const result = await sendYouTubeShort();
+                  console.log('✅ Primer video enviado:', result);
                 } catch (error) {
-                  // Silencioso
+                  console.error('❌ Error enviando primer video:', error.message);
                 }
-              }, 5000);
+              }, 3000);
             }
           } catch (userError) {
             // Silencioso
@@ -620,9 +623,12 @@ app.post('/logout', async (req, res) => {
 
 // Configurar programación automática si está definida
 if (process.env.SCHEDULE) {
+  console.log(`⏰ Configurando cron job: ${process.env.SCHEDULE} (cada 3 horas)`);
   cron.schedule(process.env.SCHEDULE, () => {
+    console.log('🔄 Cron job ejecutándose - enviando video programado...');
     sendYouTubeShort();
   });
+  console.log('✅ Cron job configurado correctamente');
 }
 
 // Endpoint para probar SSE manualmente
