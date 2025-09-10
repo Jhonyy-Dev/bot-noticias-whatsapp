@@ -102,10 +102,10 @@ async function initializeWhatsApp() {
       printQRInTerminal: false,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 10000,
-      markOnlineOnConnect: true,
+      keepAliveIntervalMs: 30000,
+      markOnlineOnConnect: false,
       syncFullHistory: false,
-      fireInitQueries: true,
+      fireInitQueries: false,
       generateHighQualityLinkPreview: false,
       patchMessageBeforeSending: (message) => {
         const requiresPatch = !!(
@@ -134,17 +134,13 @@ async function initializeWhatsApp() {
       const { connection, lastDisconnect, qr } = update;
       
       if (qr) {
-        console.log('📱 Nuevo código QR generado');
         qrString = await qrcode.toDataURL(qr);
         qrGeneratedAt = Date.now();
-        console.log('✅ QR convertido a Data URL');
         
         // Limpiar timeout anterior si existe
         if (qrTimeout) {
           clearTimeout(qrTimeout);
         }
-        
-        // NO regenerar automáticamente - solo manual
         
         // Enviar nuevo QR a todos los clientes conectados
         broadcastSSE('qr-update', { qr: qrString });
@@ -154,41 +150,26 @@ async function initializeWhatsApp() {
         const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
         const statusCode = (lastDisconnect?.error)?.output?.statusCode;
         
-        // Manejo silencioso de errores comunes
-        if (statusCode === 515) {
-          console.log('⚠️  Reconexión automática (error temporal de stream)');
-        } else if (statusCode === 401) {
-          console.log('⚠️  Reconexión automática (error de autenticación temporal)');
-        } else {
-          console.log('Conexión cerrada, reconectando automáticamente...');
-        }
-        
         if (shouldReconnect) {
           setTimeout(() => {
             initializeWhatsApp();
-          }, 3000); // Esperar 3 segundos antes de reconectar
+          }, 10000); // Esperar 10 segundos antes de reconectar
         } else {
-          console.log('🔓 Sesión cerrada desde celular - eliminando archivos auth');
           connectionStatus = 'disconnected';
           isReady = false;
           connectedUser = null;
           qrString = '';
           
-          // Eliminar archivos de autenticación cuando se cierra desde celular
           cleanAuthFiles();
-          
-          // Notificar a clientes web que se cerró sesión
           broadcastSSE('session-closed', { message: 'Sesión cerrada desde celular' });
           
-          // REGENERAR QR AUTOMÁTICAMENTE después de cerrar sesión
           setTimeout(async () => {
-            console.log('🔄 Regenerando conexión WhatsApp para nuevo QR...');
             try {
               await initializeWhatsApp();
             } catch (error) {
-              console.error('Error al regenerar conexión:', error.message);
+              // Silencioso
             }
-          }, 2000);
+          }, 15000);
         }
       } else if (connection === 'open') {
         console.log('✅ Conexión WhatsApp abierta');
@@ -251,9 +232,6 @@ async function initializeWhatsApp() {
                 id: sock.user.id,
                 connected_at: new Date().toISOString()
               };
-              console.log(`✅ Usuario conectado: ${connectedUser.name} (${connectedUser.phone})`);
-              
-              // Notificar a clientes web del estado conectado
               broadcastSSE('user-connected', { 
                 status: 'connected',
                 user: connectedUser 
@@ -261,14 +239,12 @@ async function initializeWhatsApp() {
 
               // Enviar primer YouTube Short al conectarse
               setTimeout(async () => {
-                console.log('🚀 Enviando primer YouTube Short al conectarse...');
                 try {
                   await sendYouTubeShort();
-                  console.log('✅ Primer YouTube Short enviado exitosamente');
                 } catch (error) {
-                  console.error('❌ Error enviando primer YouTube Short:', error.message);
+                  // Silencioso
                 }
-              }, 5000); // Esperar 5 segundos después de conectarse
+              }, 5000);
             }
           } catch (userError) {
             console.error('Error obteniendo información del usuario:', userError);
