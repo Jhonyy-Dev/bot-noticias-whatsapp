@@ -5,13 +5,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Entornos / credenciales
-.env
-.env.local
-.env.production
-.env.development
-!.env.example
-
 # WhatsApp Baileys (credenciales y estado de sesión)
 auth/
 
