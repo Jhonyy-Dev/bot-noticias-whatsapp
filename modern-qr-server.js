@@ -8,7 +8,7 @@ const path = require('path');
 const cron = require('node-cron');
 const http = require('http');
 const { searchYouTubeShorts, downloadYouTubeShort } = require('./youtube-api');
-const { enhanceDescription } = require('./gemini-ai');
+const { enhanceDescription, generateEnhancedDescription } = require('./gemini-ai');
 
 require('dotenv').config();
 
