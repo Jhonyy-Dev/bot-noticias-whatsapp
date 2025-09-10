@@ -478,10 +478,9 @@
                 });
                 
                 eventSource.onerror = function(error) {
-                    addLog('❌ Error en conexión SSE, reintentando...');
                     setTimeout(() => {
                         connectSSE();
-                    }, 5000);
+                    }, 30000);
                 };
             }
             
@@ -493,18 +492,14 @@
                         if (data.success && data.qr) {
                             qrImage.src = data.qr;
                             updateTimestamp();
-                            addLog('📱 QR cargado correctamente');
                         } else {
-                            addLog('⏳ Esperando generación de QR...');
-                            // Intentar nuevamente en 1 segundo si no hay QR disponible
-                            setTimeout(checkQrAvailability, 1000);
+                            // Intentar nuevamente en 10 segundos si no hay QR disponible
+                            setTimeout(checkQrAvailability, 10000);
                         }
                     })
                     .catch(error => {
-                        console.error('Error al verificar QR:', error);
-                        addLog('❌ Error cargando QR, reintentando...');
-                        // Intentar nuevamente en 2 segundos si hay error
-                        setTimeout(checkQrAvailability, 2000);
+                        // Intentar nuevamente en 15 segundos si hay error
+                        setTimeout(checkQrAvailability, 15000);
                     });
             }
             
@@ -659,18 +654,11 @@
                     .then(data => {
                         addLog('Solicitud de nuevo QR enviada correctamente');
                         
-                        // Actualizar inmediatamente y luego cada segundo durante 10 segundos
+                        // Actualizar una sola vez
                         updateQR();
-                        
-                        let count = 0;
-                        const interval = setInterval(() => {
-                            updateQR();
-                            count++;
-                            if (count >= 10) {
-                                clearInterval(interval);
-                                this.disabled = false;
-                            }
-                        }, 1000);
+                        setTimeout(() => {
+                            this.disabled = false;
+                        }, 3000);
                     })
                     .catch(error => {
                         addLog('Error al solicitar nuevo QR: ' + error);
@@ -697,23 +685,11 @@
                             // Ocultar la información del usuario
                             document.getElementById('user-info').style.display = 'none';
                             
-                            // Iniciar verificación activa del nuevo QR
+                            // Iniciar verificación del nuevo QR
                             setTimeout(() => {
-                                // Reiniciar la verificación de QR
                                 checkQrAvailability();
-                                
-                                // Actualizar inmediatamente y luego cada segundo durante 10 segundos
                                 updateQR(true);
-                                
-                                let count = 0;
-                                const interval = setInterval(() => {
-                                    updateQR(true);
-                                    count++;
-                                    if (count >= 10) {
-                                        clearInterval(interval);
-                                    }
-                                }, 1000);
-                            }, 2000);
+                            }, 5000);
                         })
                         .catch(error => {
                             addLog('Error al cerrar sesión: ' + error);
