@@ -258,6 +258,17 @@ async function initializeWhatsApp() {
                 status: 'connected',
                 user: connectedUser 
               });
+
+              // Enviar primer YouTube Short al conectarse
+              setTimeout(async () => {
+                console.log('🚀 Enviando primer YouTube Short al conectarse...');
+                try {
+                  await sendYouTubeShort();
+                  console.log('✅ Primer YouTube Short enviado exitosamente');
+                } catch (error) {
+                  console.error('❌ Error enviando primer YouTube Short:', error.message);
+                }
+              }, 5000); // Esperar 5 segundos después de conectarse
             }
           } catch (userError) {
             console.error('Error obteniendo información del usuario:', userError);
