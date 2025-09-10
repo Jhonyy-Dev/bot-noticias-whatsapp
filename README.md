@@ -62,10 +62,10 @@ npm install
 
 3. Configura las variables de entorno en el archivo `.env`:
 
-```
+```env
 YOUTUBE_TOPIC=tips de programación,desarrollo de software,desarrollo web,noticia ciberseguridad,noticia inteligencia artificial,tecnología china 2025, noticia IA, hacking con IA
-YOUTUBE_API_KEY=TU_API_KEY_DE_YOUTUBE
-GEMINI_API_KEY=TU_API_KEY_DE_GEMINI
+YOUTUBE_API_KEY=tu_api_key_aqui
+GEMINI_API_KEY=tu_gemini_key_aqui
 TARGET_GROUP_NAME=Block
 SCHEDULE=0 */3 * * *
 MAX_VIDEOS_TO_FETCH=100
