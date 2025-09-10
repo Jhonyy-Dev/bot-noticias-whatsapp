@@ -96,9 +96,57 @@ async function initializeWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth');
     authState = { state, saveCreds };
     
+    // Suprimir TODOS los logs de Baileys
+    const originalConsoleLog = console.log;
+    const originalConsoleError = console.error;
+    const originalConsoleWarn = console.warn;
+    
+    // Override console methods para filtrar logs de Baileys
+    console.log = (...args) => {
+      const message = args.join(' ');
+      if (message.includes('Closing stale open session') ||
+          message.includes('SessionEntry') ||
+          message.includes('_chains') ||
+          message.includes('registrationId') ||
+          message.includes('currentRatchet') ||
+          message.includes('ephemeralKeyPair') ||
+          message.includes('baseKey') ||
+          message.includes('preKeyId')) {
+        return;
+      }
+      originalConsoleLog(...args);
+    };
+    
+    console.error = (...args) => {
+      const message = args.join(' ');
+      if (message.includes('Closing') || message.includes('Session')) {
+        return;
+      }
+      originalConsoleError(...args);
+    };
+    
+    console.warn = (...args) => {
+      const message = args.join(' ');
+      if (message.includes('Closing') || message.includes('Session')) {
+        return;
+      }
+      originalConsoleWarn(...args);
+    };
+
+    // Logger completamente silencioso
+    const silentLogger = {
+      fatal: () => {},
+      error: () => {},
+      warn: () => {},
+      info: () => {},
+      debug: () => {},
+      trace: () => {},
+      child: () => silentLogger
+    };
+
     sock = makeWASocket({
       auth: state,
-      logger: P({ level: 'fatal' }),
+      logger: silentLogger,
       printQRInTerminal: false,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
