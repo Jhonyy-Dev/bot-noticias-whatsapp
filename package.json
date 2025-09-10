@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "WhatsApp bot that sends YouTube Shorts videos with anti-repetition channel filter",
   "main": "modern-qr-server.js",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "start": "node modern-qr-server.js",
     "server": "node modern-qr-server.js",
