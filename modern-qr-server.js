@@ -98,15 +98,17 @@ async function initializeWhatsApp() {
     
     sock = makeWASocket({
       auth: state,
-      logger: P({ level: 'silent' }),
+      logger: P({ level: 'fatal' }),
       printQRInTerminal: false,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
+      keepAliveIntervalMs: 60000,
       markOnlineOnConnect: false,
       syncFullHistory: false,
       fireInitQueries: false,
       generateHighQualityLinkPreview: false,
+      shouldIgnoreJid: () => false,
+      shouldSyncHistoryMessage: () => false,
       patchMessageBeforeSending: (message) => {
         const requiresPatch = !!(
           message.buttonsMessage ||
@@ -172,7 +174,6 @@ async function initializeWhatsApp() {
           }, 15000);
         }
       } else if (connection === 'open') {
-        console.log('✅ Conexión WhatsApp abierta');
         isReady = true;
         connectionStatus = 'connected';
         qrString = '';
@@ -247,7 +248,7 @@ async function initializeWhatsApp() {
               }, 5000);
             }
           } catch (userError) {
-            console.error('Error obteniendo información del usuario:', userError);
+            // Silencioso
           }
         }, 3000);
       }
@@ -619,9 +620,7 @@ app.post('/logout', async (req, res) => {
 
 // Configurar programación automática si está definida
 if (process.env.SCHEDULE) {
-  console.log(`Programación configurada: ${process.env.SCHEDULE}`);
   cron.schedule(process.env.SCHEDULE, () => {
-    console.log('Ejecutando envío programado de YouTube Short...');
     sendYouTubeShort();
   });
 }
