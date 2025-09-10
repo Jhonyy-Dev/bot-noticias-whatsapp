@@ -8,7 +8,7 @@ const path = require('path');
 const cron = require('node-cron');
 const http = require('http');
 const { searchYouTubeShorts, downloadYouTubeShort } = require('./youtube-api');
-const { enhanceDescription, generateEnhancedDescription } = require('./gemini-ai');
+const { enhanceDescription } = require('./gemini-ai');
 
 require('dotenv').config();
 
@@ -96,20 +96,9 @@ async function initializeWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth');
     authState = { state, saveCreds };
     
-    // Logger silencioso para Baileys pero permitir logs críticos del bot
-    const silentLogger = {
-      fatal: () => {},
-      error: () => {},
-      warn: () => {},
-      info: () => {},
-      debug: () => {},
-      trace: () => {},
-      child: () => silentLogger
-    };
-
     sock = makeWASocket({
       auth: state,
-      logger: silentLogger,
+      logger: P({ level: 'fatal' }),
       printQRInTerminal: false,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
@@ -232,7 +221,7 @@ async function initializeWhatsApp() {
                   }
                 }
                 
-                console.log(`✅ BOT CONECTADO: ${userName}`);
+                console.log(`📝 Nombre final seleccionado: ${userName}`);
               } catch (nameError) {
                 console.log('❌ Error obteniendo nombre del perfil:', nameError.message);
                 userName = sock.user.name || 'Usuario WhatsApp';
@@ -249,20 +238,14 @@ async function initializeWhatsApp() {
                 user: connectedUser 
               });
 
-              // Enviar primer video inmediatamente
+              // Enviar primer YouTube Short al conectarse
               setTimeout(async () => {
                 try {
-                  console.log('🎬 ENVIANDO PRIMER VIDEO...');
-                  const result = await sendYouTubeShort();
-                  if (result.success) {
-                    console.log('✅ PRIMER VIDEO ENVIADO');
-                  } else {
-                    console.log('❌ ERROR PRIMER VIDEO:', result.message);
-                  }
+                  await sendYouTubeShort();
                 } catch (error) {
-                  console.log('❌ ERROR PRIMER VIDEO:', error.message);
+                  // Silencioso
                 }
-              }, 3000);
+              }, 5000);
             }
           } catch (userError) {
             // Silencioso
@@ -321,10 +304,15 @@ app.get('/status', (req, res) => {
 
 // Función mejorada para buscar y enviar YouTube Short con anti-repetición de canales
 async function sendYouTubeShort() {
+  console.log('🎬 INICIANDO sendYouTubeShort()');
+  
   if (!isReady) {
-    console.log('❌ CLIENTE NO LISTO');
+    console.log('❌ Cliente de WhatsApp no está listo');
+    console.log('Estado actual:', { isReady, connectionStatus, sock: !!sock });
     return { success: false, message: 'Cliente no está listo' };
   }
+  
+  console.log('✅ Cliente listo, continuando con envío...');
 
   try {
     const targetGroupName = process.env.TARGET_GROUP_NAME;
@@ -332,7 +320,8 @@ async function sendYouTubeShort() {
       throw new Error('TARGET_GROUP_NAME no está configurado en .env');
     }
 
-    // Buscar grupo objetivo
+    // Buscar el grupo objetivo usando Baileys
+    console.log('🔍 Buscando grupo objetivo:', targetGroupName);
     const chats = await sock.groupFetchAllParticipating();
     const groups = Object.values(chats);
     const targetGroup = groups.find(group => 
@@ -344,7 +333,7 @@ async function sendYouTubeShort() {
       throw new Error(`No se encontró el grupo: ${targetGroupName}`);
     }
 
-    console.log(`✅ GRUPO: ${targetGroup.subject}`);
+    console.log(`✅ Grupo encontrado: ${targetGroup.subject}`);
 
     // Obtener temas desde variables de entorno
     const topicsFromEnv = process.env.YOUTUBE_TOPIC;
@@ -354,33 +343,45 @@ async function sendYouTubeShort() {
 
     const availableTopics = topicsFromEnv.split(',').map(topic => topic.trim());
     
-    // Rotación de temas
+    // Usar el tema actual en la rotación
     const currentTopic = availableTopics[currentTopicIndex];
-    console.log(`🔄 TEMA ${currentTopicIndex + 1}/${availableTopics.length}: ${currentTopic}`);
+    console.log(`🔄 Rotación secuencial - Tema ${currentTopicIndex + 1}/${availableTopics.length}: ${currentTopic}`);
+    
+    // Avanzar al siguiente tema para la próxima vez (rotación circular)
     currentTopicIndex = (currentTopicIndex + 1) % availableTopics.length;
 
     let video = null;
     let allFoundVideos = [];
     const attemptedTopics = [];
 
-    // Búsqueda principal
+    // BÚSQUEDA PRINCIPAL: Tema actual con filtro de canales
+    console.log(`🔍 BÚSQUEDA PRINCIPAL: ${currentTopic}`);
     const foundVideos = await searchYouTubeShorts(currentTopic);
     attemptedTopics.push(currentTopic);
     
     if (foundVideos && foundVideos.length > 0) {
+      // FILTRO CRÍTICO: Eliminar videos de canales enviados recientemente
       const videosFromNewChannels = foundVideos.filter(v => !sentChannels.includes(v.channelId));
       
+      console.log(`📹 Videos encontrados: ${foundVideos.length}`);
+      console.log(`🚫 Canales a evitar: [${sentChannels.join(', ')}]`);
+      console.log(`✅ Videos de canales nuevos: ${videosFromNewChannels.length}`);
+      
+      // PRIORIDAD ABSOLUTA: Solo usar videos de canales nuevos
       if (videosFromNewChannels.length > 0) {
         video = videosFromNewChannels[Math.floor(Math.random() * videosFromNewChannels.length)];
-        console.log(`🎯 SELECCIONADO: "${video.title}" - ${video.username}`);
+        console.log(`✅ CANAL NUEVO SELECCIONADO: "${video.title}" - Canal: "${video.username}" (${video.channelId})`);
         allFoundVideos.push(video);
       } else {
+        console.log(`⚠️ NO HAY CANALES NUEVOS DISPONIBLES para tema: ${currentTopic}`);
+        // Agregar videos encontrados para posible uso posterior
         allFoundVideos.push(...foundVideos);
       }
     }
 
-    // Búsqueda de respaldo
+    // BÚSQUEDA DE RESPALDO: Si no encontramos video de canal nuevo
     if (!video) {
+      console.log(`🔄 INICIANDO BÚSQUEDA DE RESPALDO...`);
       const maxBackupAttempts = Math.min(3, availableTopics.length - 1);
       
       for (let i = 0; i < maxBackupAttempts && !video; i++) {
@@ -391,19 +392,26 @@ async function sendYouTubeShort() {
           continue;
         }
         
+        console.log(`🔄 Intento de respaldo ${i + 1}: ${backupTopic}`);
         attemptedTopics.push(backupTopic);
         const backupVideos = await searchYouTubeShorts(backupTopic);
         
         if (backupVideos && backupVideos.length > 0) {
+          // FILTRO CRÍTICO: Solo videos de canales nuevos
           const backupVideosFromNewChannels = backupVideos.filter(v => !sentChannels.includes(v.channelId));
+          
+          console.log(`📹 Videos respaldo encontrados: ${backupVideos.length}`);
+          console.log(`✅ Videos respaldo de canales nuevos: ${backupVideosFromNewChannels.length}`);
           
           // SOLO usar videos de canales nuevos, NO repetir canales
           if (backupVideosFromNewChannels.length > 0) {
             video = backupVideosFromNewChannels[Math.floor(Math.random() * backupVideosFromNewChannels.length)];
-            console.log(`✅ RESPALDO: "${video.title}" - ${video.username}`);
+            console.log(`✅ RESPALDO CANAL NUEVO: "${video.title}" - Canal: "${video.username}" (${video.channelId})`);
             allFoundVideos.push(video);
             break;
           } else {
+            console.log(`⚠️ Respaldo ${backupTopic}: NO hay canales nuevos, continuando búsqueda...`);
+            // Agregar para posible uso como último recurso
             allFoundVideos.push(...backupVideos);
           }
         }
@@ -435,13 +443,12 @@ async function sendYouTubeShort() {
       } else if (allFoundVideos.length > 0) {
         // Último recurso absoluto
         video = allFoundVideos[Math.floor(Math.random() * allFoundVideos.length)];
-        console.log(`⚠️ ÚLTIMO RECURSO: "${video.title}" - ${video.username}`);
+        console.log(`🚨 ÚLTIMO RECURSO ABSOLUTO: "${video.title}" - Canal: "${video.username}" (${video.channelId})`);
       }
     }
 
     if (!video) {
-      console.log('❌ NO SE ENCONTRARON VIDEOS');
-      throw new Error('No se encontraron videos disponibles');
+      throw new Error('No se pudo encontrar ningún video después de todos los intentos');
     }
 
     console.log(`Descargando video: ${video.url}`);
@@ -451,7 +458,15 @@ async function sendYouTubeShort() {
       throw new Error('Error al descargar el video');
     }
 
-    const enhancedDescription = await generateEnhancedDescription(video);
+    // Generar descripción mejorada con Gemini AI
+    let enhancedDescription;
+    try {
+      const { enhanceDescription } = require('./gemini-ai');
+      enhancedDescription = await enhanceDescription(video.title, video.description, video.topic);
+    } catch (geminiError) {
+      console.error('Error con Gemini AI, usando descripción original:', geminiError.message);
+      enhancedDescription = `🎬 *${video.title}*\n\n📺 Canal: ${video.channelTitle || 'Canal desconocido'}\n\n${video.description || 'Video sobre ' + video.topic}`;
+    }
 
     // Enviar el video al grupo usando Baileys
     const targetGroupId = targetGroup.id;
@@ -459,48 +474,67 @@ async function sendYouTubeShort() {
     // Leer el archivo de video
     const videoBuffer = fs.readFileSync(outputPath);
     
-    await sock.sendMessage(targetGroup.id, {
-      video: { url: video.url },
-      caption: enhancedDescription
+    // Enviar video con descripción
+    await sock.sendMessage(targetGroupId, {
+      video: videoBuffer,
+      caption: enhancedDescription,
+      mimetype: 'video/mp4'
     });
     
-    console.log(`✅ VIDEO ENVIADO: "${video.title}" a ${targetGroup.subject}`);
-    
-    // Actualizar memoria
-    sentVideos.push(video.id);
-    sentChannels.push(video.channelId);
-    
-    if (sentVideos.length > MAX_SENT_VIDEOS_MEMORY) {
-      sentVideos.shift();
-    }
-    if (sentChannels.length > MAX_SENT_CHANNELS_MEMORY) {
-      sentChannels.shift();
+    // Registrar el video enviado para evitar repeticiones
+    if (video.id) {
+      sentVideos.push(video.id);
+      // Mantener solo los últimos MAX_SENT_VIDEOS_MEMORY videos
+      if (sentVideos.length > MAX_SENT_VIDEOS_MEMORY) {
+        sentVideos = sentVideos.slice(-MAX_SENT_VIDEOS_MEMORY);
+      }
+      console.log(`📝 Video registrado para evitar repeticiones. Videos registrados: ${sentVideos.length}`);
     }
     
-    // Enviar evento SSE
+    // CRÍTICO: Registrar el canal enviado para evitar repeticiones de canal
+    if (video.channelId) {
+      sentChannels.push(video.channelId);
+      // Mantener solo los últimos MAX_SENT_CHANNELS_MEMORY canales
+      if (sentChannels.length > MAX_SENT_CHANNELS_MEMORY) {
+        sentChannels = sentChannels.slice(-MAX_SENT_CHANNELS_MEMORY);
+      }
+      console.log(`🏷️ Canal registrado para evitar repeticiones: "${video.username}" (${video.channelId}). Canales registrados: ${sentChannels.length}`);
+    }
+    
+    console.log(`✅ Video enviado correctamente: "${video.title}" del canal: "${video.username}"`);
+    
+    // Enviar información del video a la interfaz web
+    console.log('📡 Enviando evento video-sent a la interfaz web...');
     broadcastSSE('video-sent', {
-      success: true,
-      video: {
-        title: video.title,
-        channel: video.username,
-        url: video.url,
-        duration: video.duration,
-        views: video.views
-      },
-      group: targetGroup.subject,
-      timestamp: new Date().toISOString()
+      title: video.title,
+      channelTitle: video.channelTitle || video.username || 'Canal desconocido',
+      topic: video.topic,
+      description: enhancedDescription,
+      publishedAt: video.publishedAt,
+      sentAt: new Date().toISOString()
     });
+    console.log('✅ Evento video-sent enviado');
     
-    return {
-      success: true,
-      message: 'Video enviado exitosamente',
+    // Eliminar el archivo después de enviarlo
+    try { 
+      fs.unlinkSync(outputPath); 
+      console.log('📁 Archivo temporal eliminado');
+    } catch (e) { 
+      console.log('⚠️ No se pudo eliminar archivo temporal:', e.message);
+    }
+    
+    return { 
+      success: true, 
+      message: 'YouTube Short enviado correctamente', 
       video: {
         title: video.title,
-        channel: video.username,
-        url: video.url
-      },
-      group: targetGroup.subject
+        username: video.username,
+        channelId: video.channelId,
+        topic: video.topic,
+        publishedAt: video.publishedAt
+      }
     };
+
   } catch (error) {
     console.error('Error enviando YouTube Short:', error);
     
@@ -535,16 +569,19 @@ app.post('/send-youtube-short', async (req, res) => {
     console.log('✅ RESULTADO del envío:', result);
     res.json(result);
   } catch (error) {
-    console.log('❌ ERROR ENVIANDO VIDEO:', error.message);
+    console.error('❌ ERROR CRÍTICO en endpoint /send-youtube-short:', error.message);
+    console.error('Stack trace completo:', error.stack);
     res.status(500).json({ 
       success: false, 
-      message: error.message 
+      message: 'Error interno del servidor',
+      error: error.message 
     });
   }
 });
 
 // Endpoint para cerrar sesión
 app.post('/logout', async (req, res) => {
+  console.log('🔓 Solicitud de logout recibida');
   try {
     if (sock) {
       await sock.logout();
@@ -583,9 +620,7 @@ app.post('/logout', async (req, res) => {
 
 // Configurar programación automática si está definida
 if (process.env.SCHEDULE) {
-  console.log(`⏰ CRON JOB CONFIGURADO: ${process.env.SCHEDULE}`);
   cron.schedule(process.env.SCHEDULE, () => {
-    console.log('🔄 CRON JOB EJECUTÁNDOSE...');
     sendYouTubeShort();
   });
 }
