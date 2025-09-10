@@ -1,0 +1,42 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Entornos / credenciales
+.env
+.env.local
+.env.production
+.env.development
+!.env.example
+
+# WhatsApp Baileys (credenciales y estado de sesión)
+auth/
+
+# Descargas temporales de videos
+downloads/
+
+# Logs y datos temporales
+*.log
+logs/
+*.tmp
+tmp/
+.cache/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# SO
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archivos de respaldo
+*.backup
+*.bak
+*~

@@ -1,0 +1,26 @@
+{
+  "name": "youtube-shorts-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "WhatsApp bot that sends YouTube Shorts videos with anti-repetition channel filter",
+  "main": "modern-qr-server.js",
+  "scripts": {
+    "start": "node modern-qr-server.js",
+    "server": "node modern-qr-server.js",
+    "whatsapp": "node whatsapp.js",
+    "youtube": "node youtube-api.js"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
+    "@google/genai": "^1.19.0",
+    "@google/generative-ai": "^0.21.0",
+    "@whiskeysockets/baileys": "^6.5.0",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.2",
+    "mime": "^4.0.7",
+    "node-cron": "^3.0.3",
+    "pino": "^8.16.2",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
