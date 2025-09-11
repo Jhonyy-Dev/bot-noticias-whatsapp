@@ -370,11 +370,12 @@ async function sendYouTubeShort() {
       // PRIORIDAD ABSOLUTA: Solo usar videos de canales nuevos
       if (videosFromNewChannels.length > 0) {
         video = videosFromNewChannels[Math.floor(Math.random() * videosFromNewChannels.length)];
-        console.log(`✅ CANAL NUEVO SELECCIONADO: "${video.title}" - Canal: "${video.username}" (${video.channelId})`);
+        console.log(`✅ VIDEO SELECCIONADO: "${video.title}" - Canal: "${video.channelTitle}"`);
         allFoundVideos.push(video);
       } else {
-        console.log(`⚠️ NO HAY CANALES NUEVOS DISPONIBLES para tema: ${currentTopic}`);
-        // Agregar videos encontrados para posible uso posterior
+        // USAR CUALQUIER VIDEO DISPONIBLE
+        video = foundVideos[Math.floor(Math.random() * foundVideos.length)];
+        console.log(`✅ VIDEO DISPONIBLE: "${video.title}" - Canal: "${video.channelTitle}"`);
         allFoundVideos.push(...foundVideos);
       }
     }
