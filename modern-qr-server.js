@@ -75,6 +75,9 @@ let sentChannels = []; // IDs de canales enviados recientemente
 const MAX_SENT_VIDEOS_MEMORY = 50; // Recordar últimos 50 videos
 const MAX_SENT_CHANNELS_MEMORY = 10; // Recordar últimos 10 canales
 
+// Variable para prevenir envíos simultáneos
+let isCurrentlySending = false;
+
 // Variable para rotación secuencial de temas
 let currentTopicIndex = 0;
 
@@ -352,6 +355,11 @@ async function sendYouTubeShort() {
     let allFoundVideos = [];
     const attemptedTopics = [];
 
+    // LOGS DETALLADOS PARA DEBUG
+    console.log(`🔍 ESTADO ACTUAL DE MEMORIA:`);
+    console.log(`📝 Videos enviados (${sentVideos.length}):`, sentVideos.slice(-5)); // Últimos 5
+    console.log(`🏷️ Canales enviados (${sentChannels.length}):`, sentChannels.slice(-3)); // Últimos 3
+    
     // BÚSQUEDA PRINCIPAL: Tema actual con filtro de canales
     console.log(`🔍 BÚSQUEDA PRINCIPAL: ${currentTopic}`);
     const foundVideos = await searchYouTubeShorts(currentTopic);
@@ -364,9 +372,20 @@ async function sendYouTubeShort() {
       console.log(`📹 Videos encontrados: ${foundVideos.length}`);
       console.log(`✅ Videos nuevos (no repetidos): ${newVideos.length}`);
       
+      // LOG DETALLADO DE FILTRADO
+      if (foundVideos.length > 0 && newVideos.length === 0) {
+        console.log(`⚠️ TODOS LOS VIDEOS YA FUERON ENVIADOS:`);
+        foundVideos.slice(0, 3).forEach((v, i) => {
+          const videoRepeated = sentVideos.includes(v.id);
+          const channelRepeated = sentChannels.includes(v.channelId);
+          console.log(`   ${i+1}. "${v.title}" - Video repetido: ${videoRepeated}, Canal repetido: ${channelRepeated}`);
+        });
+      }
+      
       if (newVideos.length > 0) {
         video = newVideos[Math.floor(Math.random() * newVideos.length)];
         console.log(`✅ VIDEO NUEVO SELECCIONADO: "${video.title}" - Canal: "${video.channelTitle}"`);
+        console.log(`🆔 Video ID: ${video.id}, Canal ID: ${video.channelId}`);
         allFoundVideos.push(video);
       } else {
         allFoundVideos.push(...foundVideos);
@@ -500,13 +519,15 @@ async function sendYouTubeShort() {
       mimetype: 'video/mp4'
     });
     
-    // SISTEMA ROBUSTO ANTI-REPETICIÓN - REGISTRAR DESPUÉS DEL ENVÍO EXITOSO
+    // SISTEMA ROBUSTO ANTI-REPETICIÓN - REGISTRAR INMEDIATAMENTE TRAS ENVÍO EXITOSO
     if (video.id && !sentVideos.includes(video.id)) {
       sentVideos.push(video.id);
       if (sentVideos.length > MAX_SENT_VIDEOS_MEMORY) {
         sentVideos = sentVideos.slice(-MAX_SENT_VIDEOS_MEMORY);
       }
-      console.log(`📝 Video ${video.id} registrado. Total videos recordados: ${sentVideos.length}`);
+      console.log(`📝 ✅ Video ${video.id} REGISTRADO. Total videos recordados: ${sentVideos.length}`);
+    } else if (video.id) {
+      console.log(`⚠️ Video ${video.id} YA ESTABA REGISTRADO`);
     }
     
     if (video.channelId && !sentChannels.includes(video.channelId)) {
@@ -514,8 +535,16 @@ async function sendYouTubeShort() {
       if (sentChannels.length > MAX_SENT_CHANNELS_MEMORY) {
         sentChannels = sentChannels.slice(-MAX_SENT_CHANNELS_MEMORY);
       }
-      console.log(`🏷️ Canal ${video.channelId} registrado. Total canales recordados: ${sentChannels.length}`);
+      console.log(`🏷️ ✅ Canal ${video.channelId} REGISTRADO. Total canales recordados: ${sentChannels.length}`);
+    } else if (video.channelId) {
+      console.log(`⚠️ Canal ${video.channelId} YA ESTABA REGISTRADO`);
     }
+    
+    // LOG FINAL DEL ESTADO DE MEMORIA
+    console.log(`🔍 ESTADO FINAL DE MEMORIA:`);
+    console.log(`📝 Videos: [${sentVideos.slice(-3).join(', ')}]`);
+    console.log(`🏷️ Canales: [${sentChannels.slice(-3).join(', ')}]`);
+    console.log(`📊 Memoria utilizada: ${sentVideos.length}/${MAX_SENT_VIDEOS_MEMORY} videos, ${sentChannels.length}/${MAX_SENT_CHANNELS_MEMORY} canales`);
     
     console.log(`✅ Video enviado: "${video.title}" - ${video.channelTitle}`);
     
@@ -568,7 +597,19 @@ app.post('/send-youtube-short', async (req, res) => {
   console.log('📱 Estado del cliente:', { isReady, connectionStatus, sockExists: !!sock });
   console.log('👤 Usuario conectado:', connectedUser);
   
+  // PREVENIR ENVÍOS SIMULTÁNEOS
+  if (isCurrentlySending) {
+    console.log('⚠️ ENVÍO YA EN PROGRESO - Rechazando solicitud duplicada');
+    return res.status(429).json({ 
+      success: false, 
+      message: 'Ya hay un envío en progreso. Espera a que termine.' 
+    });
+  }
+  
   try {
+    isCurrentlySending = true;
+    console.log('🔒 BLOQUEANDO envíos simultáneos');
+    
     const result = await sendYouTubeShort();
     console.log('✅ RESULTADO del envío:', result);
     res.json(result);
@@ -580,6 +621,9 @@ app.post('/send-youtube-short', async (req, res) => {
       message: 'Error interno del servidor',
       error: error.message 
     });
+  } finally {
+    isCurrentlySending = false;
+    console.log('🔓 DESBLOQUEANDO envíos simultáneos');
   }
 });
 
