@@ -63,40 +63,19 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
         topic: topic
       }))
       .filter(video => {
-        // FILTRO ESTRICTO: Solo videos de los últimos 30 días
-        if (video.publishedAt < thirtyDaysAgo) {
-          console.log(`Video omitido por ser antiguo: ${video.title} (${video.publishedAt.toDateString()})`);
+        // FILTRO BÁSICO: Solo videos de los últimos 60 días (más permisivo)
+        const sixtyDaysAgo = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000));
+        if (video.publishedAt < sixtyDaysAgo) {
+          console.log(`Video omitido por ser muy antiguo: ${video.title}`);
           return false;
         }
         
-        // FILTRO DE IDIOMA MUY ESTRICTO: Solo videos en español
-        const title = video.title;
-        const description = video.description || '';
-        const channelTitle = video.channelTitle || '';
-        const fullText = (title + ' ' + description + ' ' + channelTitle).toLowerCase();
+        // FILTRO MÍNIMO: Solo rechazar caracteres claramente no latinos
+        const fullText = (video.title + ' ' + video.description + ' ' + video.channelTitle).toLowerCase();
+        const hasNonLatinChars = /[\u4e00-\u9fff\u0900-\u097f\u0600-\u06ff\u0400-\u04ff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(fullText);
         
-        // Detectar idiomas no españoles por caracteres específicos
-        const hasChineseChars = /[\u4e00-\u9fff]/.test(fullText);
-        const hasHindiChars = /[\u0900-\u097f]/.test(fullText);
-        const hasArabicChars = /[\u0600-\u06ff]/.test(fullText);
-        const hasRussianChars = /[\u0400-\u04ff]/.test(fullText);
-        const hasJapaneseChars = /[\u3040-\u309f\u30a0-\u30ff]/.test(fullText);
-        const hasKoreanChars = /[\uac00-\ud7af]/.test(fullText);
-        
-        // Detectar solo caracteres no latinos (mantener filtro básico)
-        if (hasChineseChars || hasHindiChars || hasArabicChars || hasRussianChars || hasJapaneseChars || hasKoreanChars) {
+        if (hasNonLatinChars) {
           console.log(`🚫 Video omitido por caracteres no latinos: "${video.title}"`);
-          return false;
-        }
-        
-        // FILTRO DE TEMA: Rechazar videos financieros/bancarios no relacionados
-        const titleLower = title.toLowerCase();
-        const financialKeywords = ['banco', 'digital', 'financiero', 'ecosistema financiero', 'fintech', 'inversión', 'trading', 'crypto', 'bitcoin'];
-        const hasFinancialContent = financialKeywords.some(keyword => titleLower.includes(keyword));
-        
-        // Solo permitir contenido financiero si el tema específicamente lo incluye
-        if (hasFinancialContent && !topic.toLowerCase().includes('financiero') && !topic.toLowerCase().includes('banco')) {
-          console.log(`🚫 Video omitido por contenido financiero no solicitado: "${video.title}"`);
           return false;
         }
         

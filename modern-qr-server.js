@@ -447,11 +447,11 @@ async function sendYouTubeShort() {
       }
     }
 
-    // SISTEMA DE FALLBACK GARANTIZADO - SIEMPRE ENVIAR ALGO
+    // SISTEMA DE FALLBACK GARANTIZADO - USAR CUALQUIER VIDEO ENCONTRADO
     if (!video && allFoundVideos.length > 0) {
-      console.log(`🚨 ACTIVANDO FALLBACK GARANTIZADO`);
-      video = allFoundVideos[Math.floor(Math.random() * allFoundVideos.length)];
-      console.log(`✅ FALLBACK: "${video.title}" - Canal: "${video.username}"`);
+      console.log(`🚨 ACTIVANDO FALLBACK - USANDO CUALQUIER VIDEO ENCONTRADO`);
+      video = allFoundVideos[0]; // Usar el primer video disponible
+      console.log(`✅ FALLBACK ACTIVADO: "${video.title}" - Canal: "${video.channelTitle}"`);
     }
 
     // FALLBACK FINAL: Si no hay videos, buscar sin filtros estrictos
@@ -461,7 +461,7 @@ async function sendYouTubeShort() {
         const fallbackVideos = await searchYouTubeShorts('programación', 10);
         if (fallbackVideos && fallbackVideos.length > 0) {
           video = fallbackVideos[0];
-          console.log(`✅ FALLBACK FINAL: "${video.title}" - Canal: "${video.username}"`);
+          console.log(`✅ FALLBACK FINAL: "${video.title}" - Canal: "${video.channelTitle}"`);
         }
       } catch (fallbackError) {
         console.log('❌ Fallback final falló:', fallbackError.message);
