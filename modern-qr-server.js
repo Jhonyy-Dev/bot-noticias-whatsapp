@@ -343,12 +343,10 @@ async function sendYouTubeShort() {
 
     const availableTopics = topicsFromEnv.split(',').map(topic => topic.trim());
     
-    // Usar el tema actual en la rotación
-    const currentTopic = availableTopics[currentTopicIndex];
-    console.log(`🔄 Rotación secuencial - Tema ${currentTopicIndex + 1}/${availableTopics.length}: ${currentTopic}`);
-    
-    // Avanzar al siguiente tema para la próxima vez (rotación circular)
-    currentTopicIndex = (currentTopicIndex + 1) % availableTopics.length;
+    // Seleccionar tema ALEATORIO para evitar repetición
+    const randomTopicIndex = Math.floor(Math.random() * availableTopics.length);
+    const currentTopic = availableTopics[randomTopicIndex];
+    console.log(`🎲 Tema ALEATORIO seleccionado: ${currentTopic}`);
 
     let video = null;
     let allFoundVideos = [];
@@ -386,14 +384,20 @@ async function sendYouTubeShort() {
       const maxBackupAttempts = Math.min(3, availableTopics.length - 1);
       
       for (let i = 0; i < maxBackupAttempts && !video; i++) {
-        const backupIndex = (currentTopicIndex + i) % availableTopics.length;
-        const backupTopic = availableTopics[backupIndex];
+        // Seleccionar tema de respaldo ALEATORIO diferente al ya intentado
+        let backupTopic;
+        let attempts = 0;
+        do {
+          const randomIndex = Math.floor(Math.random() * availableTopics.length);
+          backupTopic = availableTopics[randomIndex];
+          attempts++;
+        } while (attemptedTopics.includes(backupTopic) && attempts < 10);
         
         if (attemptedTopics.includes(backupTopic)) {
           continue;
         }
         
-        console.log(`🔄 Intento de respaldo ${i + 1}: ${backupTopic}`);
+        console.log(`🔄 Respaldo ALEATORIO ${i + 1}: ${backupTopic}`);
         attemptedTopics.push(backupTopic);
         const backupVideos = await searchYouTubeShorts(backupTopic);
         
@@ -512,24 +516,21 @@ async function sendYouTubeShort() {
       mimetype: 'video/mp4'
     });
     
-    // Registrar el video enviado para evitar repeticiones
+    // SISTEMA ROBUSTO ANTI-REPETICIÓN
     if (video.id) {
       sentVideos.push(video.id);
-      // Mantener solo los últimos MAX_SENT_VIDEOS_MEMORY videos
       if (sentVideos.length > MAX_SENT_VIDEOS_MEMORY) {
         sentVideos = sentVideos.slice(-MAX_SENT_VIDEOS_MEMORY);
       }
-      console.log(`📝 Video registrado para evitar repeticiones. Videos registrados: ${sentVideos.length}`);
+      console.log(`📝 Video ${video.id} registrado. Total videos recordados: ${sentVideos.length}`);
     }
     
-    // CRÍTICO: Registrar el canal enviado para evitar repeticiones de canal
     if (video.channelId) {
       sentChannels.push(video.channelId);
-      // Mantener solo los últimos MAX_SENT_CHANNELS_MEMORY canales
       if (sentChannels.length > MAX_SENT_CHANNELS_MEMORY) {
         sentChannels = sentChannels.slice(-MAX_SENT_CHANNELS_MEMORY);
       }
-      console.log(`🏷️ Canal registrado para evitar repeticiones: "${video.username}" (${video.channelId}). Canales registrados: ${sentChannels.length}`);
+      console.log(`🏷️ Canal ${video.channelId} registrado. Total canales recordados: ${sentChannels.length}`);
     }
     
     console.log(`✅ Video enviado: "${video.title}" - ${video.channelTitle}`);
