@@ -485,8 +485,12 @@ async function sendYouTubeShort() {
       };
     }
 
-    // Enviar video directamente sin descargar
-    console.log(`Enviando video directamente: ${video.url}`);
+    console.log(`Descargando video: ${video.url}`);
+    const outputPath = path.join(__dirname, 'downloads', `${video.id}.mp4`);
+    await downloadYouTubeShort(video.url, outputPath);
+    if (!outputPath || !fs.existsSync(outputPath)) {
+      throw new Error('Error al descargar el video');
+    }
 
     // Generar descripción mejorada con Gemini AI
     let enhancedDescription;
@@ -498,10 +502,14 @@ async function sendYouTubeShort() {
       enhancedDescription = `🎬 *${video.title}*\n\n📺 Canal: ${video.channelTitle || 'Canal desconocido'}\n\n${video.description || 'Video sobre ' + video.topic}`;
     }
 
-    // Enviar video directamente desde URL
+    // Leer el archivo de video descargado
+    const videoBuffer = fs.readFileSync(outputPath);
+    
+    // Enviar video como archivo
     await sock.sendMessage(targetGroup.id, {
-      video: { url: video.url },
-      caption: enhancedDescription
+      video: videoBuffer,
+      caption: enhancedDescription,
+      mimetype: 'video/mp4'
     });
     
     // Registrar el video enviado para evitar repeticiones
@@ -525,6 +533,14 @@ async function sendYouTubeShort() {
     }
     
     console.log(`✅ Video enviado: "${video.title}" - ${video.channelTitle}`);
+    
+    // Eliminar el archivo después de enviarlo
+    try { 
+      fs.unlinkSync(outputPath); 
+      console.log('📁 Archivo temporal eliminado');
+    } catch (e) { 
+      console.log('⚠️ No se pudo eliminar archivo temporal:', e.message);
+    }
     
     return { 
       success: true, 
