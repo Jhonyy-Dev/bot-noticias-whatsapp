@@ -727,8 +727,9 @@
                             addLog(`URL: ${videoInfo.url}`);
                             
                             // Actualizar el último short enviado
+                            const description = videoInfo.description || videoInfo.title || 'Sin descripción disponible';
                             document.getElementById('last-news').innerHTML = `
-                                <strong>${videoInfo.username}</strong>: ${videoInfo.description.substring(0, 100)}${videoInfo.description.length > 100 ? '...' : ''}
+                                <strong>${videoInfo.username || 'Canal desconocido'}</strong>: ${description.substring(0, 100)}${description.length > 100 ? '...' : ''}
                                 <br><small class="text-muted">Enviado: ${new Date().toLocaleTimeString()}</small>
                             `;
                         } else {

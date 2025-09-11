@@ -431,7 +431,7 @@ async function sendYouTubeShort() {
       }
     }
 
-    // SISTEMA CONSOLIDADO DE FALLBACK CON ANTI-REPETICIÓN
+    // SISTEMA CONSOLIDADO DE FALLBACK CON ANTI-REPETICIÓN ESTRICTA
     if (!video && allFoundVideos.length > 0) {
       console.log(`🚨 ACTIVANDO SISTEMA DE FALLBACK CONSOLIDADO`);
       
@@ -455,41 +455,26 @@ async function sendYouTubeShort() {
         video = notRepeatedVideos[Math.floor(Math.random() * notRepeatedVideos.length)];
         console.log(`⚠️ FALLBACK CANAL CONOCIDO: "${video.title}" - Canal: "${video.channelTitle}"`);
       }
-      // ÚLTIMO RECURSO: Cualquier video (repetido)
+      // NO MÁS FALLBACK REPETIDO - RECHAZAR SI TODO ESTÁ REPETIDO
       else {
-        video = allFoundVideos[Math.floor(Math.random() * allFoundVideos.length)];
-        console.log(`🚨 FALLBACK REPETIDO: "${video.title}" - Canal: "${video.channelTitle}"`);
+        console.log(`🚫 TODOS LOS VIDEOS YA FUERON ENVIADOS - NO HAY CONTENIDO NUEVO DISPONIBLE`);
+        throw new Error('No hay videos nuevos disponibles. Todos los videos encontrados ya fueron enviados recientemente.');
       }
     }
 
-    // FALLBACK FINAL: Si no hay videos, buscar sin filtros estrictos
+    // VERIFICACIÓN FINAL ANTES DE ENVÍO
     if (!video) {
-      console.log(`🆘 FALLBACK FINAL: Buscando sin filtros estrictos`);
-      try {
-        const fallbackVideos = await searchYouTubeShorts('programación', 10);
-        if (fallbackVideos && fallbackVideos.length > 0) {
-          video = fallbackVideos[0];
-          console.log(`✅ FALLBACK FINAL: "${video.title}" - Canal: "${video.channelTitle}"`);
-        }
-      } catch (fallbackError) {
-        console.log('❌ Fallback final falló:', fallbackError.message);
-      }
+      throw new Error('No se encontraron videos nuevos disponibles. Intenta más tarde cuando haya contenido fresco.');
     }
 
-    // GARANTÍA ABSOLUTA: Crear video dummy si todo falla
-    if (!video) {
-      console.log(`🔴 CREANDO VIDEO DUMMY PARA GARANTIZAR ENVÍO`);
-      const dummyMessage = `🤖 *Bot de Noticias Activo*\n\n⏰ ${new Date().toLocaleString('es-ES')}\n\n📢 El bot está funcionando correctamente.\nPróximo video en 3 horas.\n\n🔄 Sistema automático cada 3 horas.`;
-      
-      // Enviar mensaje de texto como fallback
-      await sock.sendMessage(targetGroup.id, { text: dummyMessage });
-      console.log(`✅ MENSAJE DUMMY ENVIADO`);
-      
-      return {
-        success: true,
-        message: 'Mensaje de estado enviado (fallback)',
-        video: { title: 'Estado del Bot', username: 'Sistema' }
-      };
+    // VERIFICACIÓN CRÍTICA: Asegurar que el video seleccionado NO esté repetido
+    if (sentVideos.includes(video.id)) {
+      console.log(`🚫 CRÍTICO: Video ${video.id} ya fue enviado. Cancelando envío.`);
+      throw new Error(`El video "${video.title}" ya fue enviado recientemente. No se pueden enviar videos repetidos.`);
+    }
+
+    if (sentChannels.includes(video.channelId)) {
+      console.log(`⚠️ ADVERTENCIA: Canal ${video.channelId} ya fue usado recientemente, pero permitiendo video nuevo del mismo canal.`);
     }
 
     console.log(`Descargando video: ${video.url}`);
