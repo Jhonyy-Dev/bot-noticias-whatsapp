@@ -484,12 +484,8 @@ async function sendYouTubeShort() {
       };
     }
 
-    console.log(`Descargando video: ${video.url}`);
-    const outputPath = path.join(__dirname, 'downloads', `${video.id}.mp4`);
-    await downloadYouTubeShort(video.url, outputPath);
-    if (!outputPath || !fs.existsSync(outputPath)) {
-      throw new Error('Error al descargar el video');
-    }
+    // Enviar video directamente sin descargar
+    console.log(`Enviando video directamente: ${video.url}`);
 
     // Generar descripción mejorada con Gemini AI
     let enhancedDescription;
@@ -501,17 +497,10 @@ async function sendYouTubeShort() {
       enhancedDescription = `🎬 *${video.title}*\n\n📺 Canal: ${video.channelTitle || 'Canal desconocido'}\n\n${video.description || 'Video sobre ' + video.topic}`;
     }
 
-    // Enviar el video al grupo usando Baileys
-    const targetGroupId = targetGroup.id;
-    
-    // Leer el archivo de video
-    const videoBuffer = fs.readFileSync(outputPath);
-    
-    // Enviar video con descripción
-    await sock.sendMessage(targetGroupId, {
-      video: videoBuffer,
-      caption: enhancedDescription,
-      mimetype: 'video/mp4'
+    // Enviar video directamente desde URL
+    await sock.sendMessage(targetGroup.id, {
+      video: { url: video.url },
+      caption: enhancedDescription
     });
     
     // Registrar el video enviado para evitar repeticiones
@@ -534,27 +523,7 @@ async function sendYouTubeShort() {
       console.log(`🏷️ Canal registrado para evitar repeticiones: "${video.username}" (${video.channelId}). Canales registrados: ${sentChannels.length}`);
     }
     
-    console.log(`✅ Video enviado correctamente: "${video.title}" del canal: "${video.username}"`);
-    
-    // Enviar información del video a la interfaz web
-    console.log('📡 Enviando evento video-sent a la interfaz web...');
-    broadcastSSE('video-sent', {
-      title: video.title,
-      channelTitle: video.channelTitle || video.username || 'Canal desconocido',
-      topic: video.topic,
-      description: enhancedDescription,
-      publishedAt: video.publishedAt,
-      sentAt: new Date().toISOString()
-    });
-    console.log('✅ Evento video-sent enviado');
-    
-    // Eliminar el archivo después de enviarlo
-    try { 
-      fs.unlinkSync(outputPath); 
-      console.log('📁 Archivo temporal eliminado');
-    } catch (e) { 
-      console.log('⚠️ No se pudo eliminar archivo temporal:', e.message);
-    }
+    console.log(`✅ Video enviado: "${video.title}" - ${video.channelTitle}`);
     
     return { 
       success: true, 
