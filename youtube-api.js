@@ -30,7 +30,7 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
     const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
       params: {
         part: 'snippet',
-        q: `"${topic}" shorts`,
+        q: `"${topic}" shorts español spanish`,
         type: 'video',
         videoDuration: 'short',
         maxResults: maxResults,
@@ -69,10 +69,11 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
           return false;
         }
         
-        // FILTRO DE IDIOMA: Solo videos en español
+        // FILTRO DE IDIOMA MUY ESTRICTO: Solo videos en español
         const title = video.title;
         const description = video.description || '';
-        const fullText = title + ' ' + description;
+        const channelTitle = video.channelTitle || '';
+        const fullText = (title + ' ' + description + ' ' + channelTitle).toLowerCase();
         
         // Detectar idiomas no españoles por caracteres específicos
         const hasChineseChars = /[\u4e00-\u9fff]/.test(fullText);
@@ -82,9 +83,31 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
         const hasJapaneseChars = /[\u3040-\u309f\u30a0-\u30ff]/.test(fullText);
         const hasKoreanChars = /[\uac00-\ud7af]/.test(fullText);
         
-        if (hasChineseChars || hasHindiChars || hasArabicChars || hasRussianChars || hasJapaneseChars || hasKoreanChars) {
+        // Detectar palabras en inglés comunes
+        const englishWords = ['the', 'and', 'for', 'you', 'with', 'this', 'that', 'have', 'from', 'they', 'know', 'want', 'been', 'good', 'much', 'some', 'time', 'very', 'when', 'come', 'here', 'just', 'like', 'long', 'make', 'many', 'over', 'such', 'take', 'than', 'them', 'well', 'were', 'will', 'would', 'there', 'could', 'other', 'after', 'first', 'never', 'these', 'think', 'where', 'being', 'every', 'great', 'might', 'shall', 'still', 'those', 'under', 'while', 'should', 'programming', 'coding', 'tutorial', 'learn', 'beginner', 'advanced', 'course', 'lesson', 'guide', 'tips', 'tricks', 'how to', 'step by step', 'easy', 'simple', 'complete', 'full', 'best', 'top', 'amazing', 'awesome', 'perfect', 'ultimate', 'master', 'expert'];
+        
+        const hasEnglishWords = englishWords.some(word => {
+          const regex = new RegExp(`\\b${word}\\b`, 'i');
+          return regex.test(fullText);
+        });
+        
+        if (hasChineseChars || hasHindiChars || hasArabicChars || hasRussianChars || hasJapaneseChars || hasKoreanChars || hasEnglishWords) {
           console.log(`🚫 Video omitido por no estar en español: "${video.title}"`);
-          console.log(`   Caracteres detectados: chino=${hasChineseChars}, hindi=${hasHindiChars}, árabe=${hasArabicChars}, ruso=${hasRussianChars}, japonés=${hasJapaneseChars}, coreano=${hasKoreanChars}`);
+          console.log(`   Canal: ${video.channelTitle}`);
+          console.log(`   Razón: caracteres extranjeros=${hasChineseChars || hasHindiChars || hasArabicChars || hasRussianChars || hasJapaneseChars || hasKoreanChars}, palabras inglés=${hasEnglishWords}`);
+          return false;
+        }
+        
+        // Filtro adicional: debe contener palabras en español
+        const spanishWords = ['de', 'la', 'el', 'en', 'y', 'a', 'que', 'es', 'se', 'no', 'te', 'lo', 'le', 'da', 'su', 'por', 'son', 'con', 'para', 'una', 'del', 'las', 'los', 'como', 'pero', 'sus', 'fue', 'ser', 'han', 'más', 'qué', 'muy', 'sin', 'vez', 'dos', 'año', 'años', 'día', 'días', 'vida', 'casa', 'mundo', 'país', 'tiempo', 'trabajo', 'parte', 'lugar', 'forma', 'caso', 'mano', 'momento', 'manera', 'sistema', 'agua', 'punto', 'realidad', 'razón', 'estado', 'ciudad', 'ejemplo', 'grupo', 'problema', 'hecho', 'mujer', 'hombre', 'proyecto', 'programa', 'proceso', 'servicio', 'mercado', 'precio', 'producto', 'empresa', 'gobierno', 'desarrollo', 'educación', 'información', 'tecnología', 'programación', 'desarrollo', 'código', 'tutorial', 'aprender', 'curso', 'lección', 'guía', 'consejos', 'trucos', 'cómo', 'paso', 'fácil', 'simple', 'completo', 'mejor', 'increíble', 'perfecto', 'maestro', 'experto'];
+        
+        const hasSpanishWords = spanishWords.some(word => {
+          const regex = new RegExp(`\\b${word}\\b`, 'i');
+          return regex.test(fullText);
+        });
+        
+        if (!hasSpanishWords) {
+          console.log(`🚫 Video omitido por no contener palabras en español: "${video.title}"`);
           return false;
         }
         

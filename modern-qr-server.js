@@ -618,11 +618,34 @@ app.post('/logout', async (req, res) => {
   }
 });
 
-// Configurar programación automática si está definida
+// Configurar programación automática ROBUSTA cada 3 horas
 if (process.env.SCHEDULE) {
-  cron.schedule(process.env.SCHEDULE, () => {
-    sendYouTubeShort();
+  console.log(`⏰ Configurando cron job robusto: ${process.env.SCHEDULE}`);
+  
+  cron.schedule(process.env.SCHEDULE, async () => {
+    console.log('🔄 CRON JOB EJECUTÁNDOSE - Enviando video programado...');
+    try {
+      await sendYouTubeShort();
+      console.log('✅ Video enviado por cron job exitosamente');
+    } catch (error) {
+      console.error('❌ ERROR en cron job:', error.message);
+      // Reintentar una vez después de 30 segundos
+      setTimeout(async () => {
+        try {
+          console.log('🔄 REINTENTANDO envío por cron job...');
+          await sendYouTubeShort();
+          console.log('✅ Video enviado en reintento exitosamente');
+        } catch (retryError) {
+          console.error('❌ ERROR en reintento de cron job:', retryError.message);
+        }
+      }, 30000);
+    }
+  }, {
+    scheduled: true,
+    timezone: "America/New_York"
   });
+  
+  console.log('✅ Cron job configurado y activo');
 }
 
 // Endpoint para probar SSE manualmente
