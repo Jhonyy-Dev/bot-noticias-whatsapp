@@ -210,54 +210,14 @@ El resumen debe explicar de qué trata el video de forma concisa y directa.`;
     }
 
   } catch (error) {
-    console.error('Error con Gemini AI:', error.message);
-    
-    // RETRY con modelo alternativo si falla
-    try {
-      console.log('🔄 Intentando con modelo alternativo gemini-1.5-pro...');
-      
-      const { GoogleGenAI } = require('@google/genai');
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      const response = await ai.models.generateContentStream({
-        model: 'gemini-1.5-pro',
-        config: {},
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: `Genera un resumen MUY BREVE en español (máximo 2 oraciones) para este video de YouTube:
-
-Título: ${title}
-Tema: ${topic}
-Descripción: ${description || 'Sin descripción'}
-
-El resumen debe explicar de qué trata el video de forma concisa y directa.`,
-              },
-            ],
-          },
-        ],
-      });
-
-      let generatedText = '';
-      for await (const chunk of response) {
-        if (chunk.text) {
-          generatedText += chunk.text;
-        }
-      }
-
-      if (generatedText.trim()) {
-        console.log('✅ Descripción generada por Gemini AI (modelo alternativo)');
-        return `🎬 *${title}*\n\n${generatedText.trim()}`;
-      }
-    } catch (retryError) {
-      console.error('Error con modelo alternativo:', retryError.message);
+    // Silenciar errores de Gemini AI para reducir ruido en logs
+    // Solo mostrar error si es crítico
+    if (error.message.includes('API_KEY') || error.message.includes('quota')) {
+      console.log('⚠️ Gemini AI no disponible, usando descripción automática');
     }
     
     // ÚLTIMO RECURSO: Generar descripción inteligente sin IA
     const smartDescription = generateSmartDescription(title, description, topic);
-    console.log('⚠️ Usando descripción inteligente generada automáticamente');
     return `🎬 *${title}*\n\n${smartDescription}`;
   }
 }

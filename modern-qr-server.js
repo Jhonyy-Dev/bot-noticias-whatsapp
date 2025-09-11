@@ -358,22 +358,17 @@ async function sendYouTubeShort() {
     attemptedTopics.push(currentTopic);
     
     if (foundVideos && foundVideos.length > 0) {
-      // FILTRO CRÍTICO: Eliminar videos de canales enviados recientemente
-      const videosFromNewChannels = foundVideos.filter(v => !sentChannels.includes(v.channelId));
+      // FILTRO ANTI-REPETICIÓN: Eliminar videos ya enviados
+      const newVideos = foundVideos.filter(v => !sentVideos.includes(v.id) && !sentChannels.includes(v.channelId));
       
       console.log(`📹 Videos encontrados: ${foundVideos.length}`);
-      console.log(`🚫 Canales a evitar: [${sentChannels.join(', ')}]`);
-      console.log(`✅ Videos de canales nuevos: ${videosFromNewChannels.length}`);
+      console.log(`✅ Videos nuevos (no repetidos): ${newVideos.length}`);
       
-      // PRIORIDAD ABSOLUTA: Solo usar videos de canales nuevos
-      if (videosFromNewChannels.length > 0) {
-        video = videosFromNewChannels[Math.floor(Math.random() * videosFromNewChannels.length)];
-        console.log(`✅ VIDEO SELECCIONADO: "${video.title}" - Canal: "${video.channelTitle}"`);
+      if (newVideos.length > 0) {
+        video = newVideos[Math.floor(Math.random() * newVideos.length)];
+        console.log(`✅ VIDEO NUEVO SELECCIONADO: "${video.title}" - Canal: "${video.channelTitle}"`);
         allFoundVideos.push(video);
       } else {
-        // USAR CUALQUIER VIDEO DISPONIBLE
-        video = foundVideos[Math.floor(Math.random() * foundVideos.length)];
-        console.log(`✅ VIDEO DISPONIBLE: "${video.title}" - Canal: "${video.channelTitle}"`);
         allFoundVideos.push(...foundVideos);
       }
     }
@@ -402,61 +397,50 @@ async function sendYouTubeShort() {
         const backupVideos = await searchYouTubeShorts(backupTopic);
         
         if (backupVideos && backupVideos.length > 0) {
-          // FILTRO CRÍTICO: Solo videos de canales nuevos
-          const backupVideosFromNewChannels = backupVideos.filter(v => !sentChannels.includes(v.channelId));
+          // FILTRO ANTI-REPETICIÓN para respaldo
+          const newBackupVideos = backupVideos.filter(v => !sentVideos.includes(v.id) && !sentChannels.includes(v.channelId));
           
-          console.log(`📹 Videos respaldo encontrados: ${backupVideos.length}`);
-          console.log(`✅ Videos respaldo de canales nuevos: ${backupVideosFromNewChannels.length}`);
-          
-          // SOLO usar videos de canales nuevos, NO repetir canales
-          if (backupVideosFromNewChannels.length > 0) {
-            video = backupVideosFromNewChannels[Math.floor(Math.random() * backupVideosFromNewChannels.length)];
-            console.log(`✅ RESPALDO CANAL NUEVO: "${video.title}" - Canal: "${video.username}" (${video.channelId})`);
+          if (newBackupVideos.length > 0) {
+            video = newBackupVideos[Math.floor(Math.random() * newBackupVideos.length)];
+            console.log(`✅ RESPALDO NUEVO: "${video.title}" - Canal: "${video.channelTitle}"`);
             allFoundVideos.push(video);
             break;
           } else {
-            console.log(`⚠️ Respaldo ${backupTopic}: NO hay canales nuevos, continuando búsqueda...`);
-            // Agregar para posible uso como último recurso
             allFoundVideos.push(...backupVideos);
           }
         }
       }
     }
 
-    // ÚLTIMO RECURSO: Solo si absolutamente no hay canales nuevos
+    // SISTEMA CONSOLIDADO DE FALLBACK CON ANTI-REPETICIÓN
     if (!video && allFoundVideos.length > 0) {
-      console.log(`🚨 ÚLTIMO RECURSO: No se encontraron videos de canales nuevos en ningún tema`);
+      console.log(`🚨 ACTIVANDO SISTEMA DE FALLBACK CONSOLIDADO`);
       
-      // Filtrar videos que ya hemos enviado recientemente
-      const notRecentlySentVideos = allFoundVideos.filter(v => !sentVideos.includes(v.id));
+      // 1. Filtrar videos que ya hemos enviado
+      const notRepeatedVideos = allFoundVideos.filter(v => !sentVideos.includes(v.id));
       
-      // Filtrar videos de canales que ya hemos enviado recientemente
-      const notRecentChannelVideos = notRecentlySentVideos.filter(v => !sentChannels.includes(v.channelId));
+      // 2. De los no repetidos, filtrar canales que no hemos usado recientemente
+      const newChannelVideos = notRepeatedVideos.filter(v => !sentChannels.includes(v.channelId));
       
       console.log(`📊 Videos totales encontrados: ${allFoundVideos.length}`);
-      console.log(`📊 Sin repetir videos: ${notRecentlySentVideos.length}`);
-      console.log(`✅ Canales nuevos en último recurso: ${notRecentChannelVideos.length}`);
+      console.log(`📊 Videos no repetidos: ${notRepeatedVideos.length}`);
+      console.log(`✅ Videos de canales nuevos: ${newChannelVideos.length}`);
       
-      // PRIORIDAD: Videos de canales nuevos (por si acaso)
-      if (notRecentChannelVideos.length > 0) {
-        video = notRecentChannelVideos[Math.floor(Math.random() * notRecentChannelVideos.length)];
-        console.log(`✅ ÚLTIMO RECURSO CANAL NUEVO: "${video.title}" - Canal: "${video.username}" (${video.channelId})`);
-      } else if (notRecentlySentVideos.length > 0) {
-        // Solo si NO hay canales nuevos disponibles
-        video = notRecentlySentVideos[Math.floor(Math.random() * notRecentlySentVideos.length)];
-        console.log(`⚠️ ÚLTIMO RECURSO CANAL REPETIDO: "${video.title}" - Canal: "${video.username}" (${video.channelId})`);
-      } else if (allFoundVideos.length > 0) {
-        // Último recurso absoluto
-        video = allFoundVideos[Math.floor(Math.random() * allFoundVideos.length)];
-        console.log(`🚨 ÚLTIMO RECURSO ABSOLUTO: "${video.title}" - Canal: "${video.username}" (${video.channelId})`);
+      // PRIORIDAD 1: Videos de canales nuevos (nunca repetidos)
+      if (newChannelVideos.length > 0) {
+        video = newChannelVideos[Math.floor(Math.random() * newChannelVideos.length)];
+        console.log(`✅ FALLBACK CANAL NUEVO: "${video.title}" - Canal: "${video.channelTitle}"`);
       }
-    }
-
-    // SISTEMA DE FALLBACK GARANTIZADO - USAR CUALQUIER VIDEO ENCONTRADO
-    if (!video && allFoundVideos.length > 0) {
-      console.log(`🚨 ACTIVANDO FALLBACK - USANDO CUALQUIER VIDEO ENCONTRADO`);
-      video = allFoundVideos[0]; // Usar el primer video disponible
-      console.log(`✅ FALLBACK ACTIVADO: "${video.title}" - Canal: "${video.channelTitle}"`);
+      // PRIORIDAD 2: Videos no repetidos (aunque el canal sea conocido)
+      else if (notRepeatedVideos.length > 0) {
+        video = notRepeatedVideos[Math.floor(Math.random() * notRepeatedVideos.length)];
+        console.log(`⚠️ FALLBACK CANAL CONOCIDO: "${video.title}" - Canal: "${video.channelTitle}"`);
+      }
+      // ÚLTIMO RECURSO: Cualquier video (repetido)
+      else {
+        video = allFoundVideos[Math.floor(Math.random() * allFoundVideos.length)];
+        console.log(`🚨 FALLBACK REPETIDO: "${video.title}" - Canal: "${video.channelTitle}"`);
+      }
     }
 
     // FALLBACK FINAL: Si no hay videos, buscar sin filtros estrictos
@@ -502,7 +486,7 @@ async function sendYouTubeShort() {
       const { enhanceDescription } = require('./gemini-ai');
       enhancedDescription = await enhanceDescription(video.title, video.description, video.topic);
     } catch (geminiError) {
-      console.error('Error con Gemini AI, usando descripción original:', geminiError.message);
+      // Silenciar errores de Gemini AI para reducir ruido en logs
       enhancedDescription = `🎬 *${video.title}*\n\n📺 Canal: ${video.channelTitle || 'Canal desconocido'}\n\n${video.description || 'Video sobre ' + video.topic}`;
     }
 
@@ -516,8 +500,8 @@ async function sendYouTubeShort() {
       mimetype: 'video/mp4'
     });
     
-    // SISTEMA ROBUSTO ANTI-REPETICIÓN
-    if (video.id) {
+    // SISTEMA ROBUSTO ANTI-REPETICIÓN - REGISTRAR DESPUÉS DEL ENVÍO EXITOSO
+    if (video.id && !sentVideos.includes(video.id)) {
       sentVideos.push(video.id);
       if (sentVideos.length > MAX_SENT_VIDEOS_MEMORY) {
         sentVideos = sentVideos.slice(-MAX_SENT_VIDEOS_MEMORY);
@@ -525,7 +509,7 @@ async function sendYouTubeShort() {
       console.log(`📝 Video ${video.id} registrado. Total videos recordados: ${sentVideos.length}`);
     }
     
-    if (video.channelId) {
+    if (video.channelId && !sentChannels.includes(video.channelId)) {
       sentChannels.push(video.channelId);
       if (sentChannels.length > MAX_SENT_CHANNELS_MEMORY) {
         sentChannels = sentChannels.slice(-MAX_SENT_CHANNELS_MEMORY);
