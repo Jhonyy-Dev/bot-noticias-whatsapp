@@ -5,10 +5,10 @@ const P = require('pino');
 const qrcode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
-const cron = require('node-cron');
 const http = require('http');
 const { searchYouTubeShorts, downloadYouTubeShort } = require('./youtube-api');
 const { enhanceDescription } = require('./gemini-ai');
+const { videoScheduler, getSchedulerStatus } = require('./video-scheduler');
 
 require('dotenv').config();
 
@@ -93,9 +93,41 @@ function broadcastSSE(event, data) {
   });
 }
 
+// Función para limpiar archivos de sesión antiguos
+async function cleanupOldSessionFiles() {
+  try {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const authDir = path.join(process.cwd(), 'auth');
+    
+    const files = await fs.readdir(authDir);
+    const sessionFiles = files.filter(file => file.startsWith('session-') && file.endsWith('.json'));
+    
+    if (sessionFiles.length > 100) {
+      // Mantener solo los 50 archivos más recientes
+      const filesToDelete = sessionFiles.slice(0, sessionFiles.length - 50);
+      
+      for (const file of filesToDelete) {
+        try {
+          await fs.unlink(path.join(authDir, file));
+        } catch (err) {
+          // Silencioso si no se puede eliminar
+        }
+      }
+      
+      console.log(`🗑️ Archivos de sesión limpiados (${filesToDelete.length} archivos)`);
+    }
+  } catch (error) {
+    // Silencioso - no afectar funcionamiento
+  }
+}
+
 // Función para inicializar el cliente de WhatsApp con Baileys
 async function initializeWhatsApp() {
   try {
+    // Limpiar archivos de sesión antiguos antes de iniciar
+    await cleanupOldSessionFiles();
+    
     const { state, saveCreds } = await useMultiFileAuthState('auth');
     authState = { state, saveCreds };
     
@@ -155,7 +187,11 @@ async function initializeWhatsApp() {
         const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
         const statusCode = (lastDisconnect?.error)?.output?.statusCode;
         
+        // Limpiar referencia global inmediatamente
+        global.waSocket = null;
+        
         if (shouldReconnect) {
+          console.log('🔄 Reconectando WhatsApp en 10 segundos...');
           setTimeout(() => {
             initializeWhatsApp();
           }, 10000); // Esperar 10 segundos antes de reconectar
@@ -180,6 +216,9 @@ async function initializeWhatsApp() {
         isReady = true;
         connectionStatus = 'connected';
         qrString = '';
+        
+        // Establecer referencia global inmediatamente
+        global.waSocket = sock;
         
         // Limpiar timeout de QR ya que se conectó exitosamente
         if (qrTimeout) {
@@ -224,7 +263,11 @@ async function initializeWhatsApp() {
                   }
                 }
                 
+                // Solo mostrar nombre final en primera conexión
+              if (!global.finalNameLogged) {
                 console.log(`📝 Nombre final seleccionado: ${userName}`);
+                global.finalNameLogged = true;
+              }
               } catch (nameError) {
                 console.log('❌ Error obteniendo nombre del perfil:', nameError.message);
                 userName = sock.user.name || 'Usuario WhatsApp';
@@ -241,14 +284,54 @@ async function initializeWhatsApp() {
                 user: connectedUser 
               });
 
-              // Enviar primer YouTube Short al conectarse
-              setTimeout(async () => {
-                try {
-                  await sendYouTubeShort();
-                } catch (error) {
-                  // Silencioso
+              // Establecer referencia global para el VideoScheduler
+              global.waSocket = sock;
+              
+              // Solo enviar primer video si NO hay registro previo (evitar envíos en reconexiones)
+              const groupId = process.env.TARGET_GROUP_NAME || 'Club Dev Maval';
+              const lastSend = await videoScheduler.getLastSendTime(groupId);
+              
+              if (!lastSend) {
+                console.log('✅ WhatsApp conectado - Enviando primer video...');
+                setTimeout(async () => {
+                  try {
+                    await videoScheduler.executeVideoSend();
+                    await videoScheduler.setLastSendTime(groupId);
+                    console.log('✅ Primer video enviado - Contador de 3 horas iniciado');
+                  } catch (error) {
+                    console.error('❌ Error enviando primer video:', error.message);
+                  }
+                }, 3000);
+              } else {
+                // Verificar si ya pasó el tiempo programado
+                const now = Date.now();
+                const nextAllowedTime = lastSend.nextAllowed;
+                
+                if (now >= nextAllowedTime) {
+                  console.log('⏰ WhatsApp reconectado - Tiempo de envío ya pasó, enviando video ahora...');
+                  setTimeout(async () => {
+                    try {
+                      await videoScheduler.executeVideoSend();
+                      await videoScheduler.setLastSendTime(groupId);
+                      console.log('✅ Video enviado tras reconexión - Nuevo contador iniciado');
+                    } catch (error) {
+                      console.error('❌ Error enviando video tras reconexión:', error.message);
+                    }
+                  }, 3000);
+                } else {
+                  const nextSendTime = new Date(lastSend.nextAllowed).toLocaleString();
+                  // Solo mostrar próximo envío cada 30 minutos para reducir logs
+                  const now = Date.now();
+                  const lastLogTime = global.lastReconnectLog || 0;
+                  const timeSinceLastLog = now - lastLogTime;
+                  const thirtyMinutes = 30 * 60 * 1000;
+                  
+                  if (timeSinceLastLog > thirtyMinutes) {
+                    console.log(`✅ Próximo video: ${nextSendTime}`);
+                    global.lastReconnectLog = now;
+                  }
                 }
-              }, 5000);
+              }
             }
           } catch (userError) {
             // Silencioso
@@ -258,6 +341,11 @@ async function initializeWhatsApp() {
     });
 
     sock.ev.on('creds.update', authState.saveCreds);
+    
+    // Limpiar archivos de sesión cada 6 horas para mantener memoria controlada
+    setInterval(async () => {
+      await cleanupOldSessionFiles();
+    }, 6 * 60 * 60 * 1000);
     
   } catch (error) {
     console.error('Error inicializando cliente WhatsApp:', error);
@@ -576,7 +664,7 @@ async function sendYouTubeShort() {
   }
 }
 
-// Ruta para enviar YouTube Short manualmente
+// Ruta para enviar YouTube Short manualmente desde la web
 app.post('/send-youtube-short', async (req, res) => {
   console.log('🚀 INICIO - Solicitud de envío de video recibida desde interfaz web');
   console.log('📱 Estado del cliente:', { isReady, connectionStatus, sockExists: !!sock });
@@ -595,7 +683,21 @@ app.post('/send-youtube-short', async (req, res) => {
     isCurrentlySending = true;
     console.log('🔒 BLOQUEANDO envíos simultáneos');
     
-    const result = await sendYouTubeShort();
+    // Usar el VideoSchedulerService para envío manual desde web
+    const groupId = process.env.TARGET_GROUP_NAME || 'Club Dev Maval';
+    
+    // Ejecutar envío usando el scheduler (sin verificación de tiempo para envío manual)
+    await videoScheduler.executeVideoSend();
+    
+    // Actualizar timestamp para evitar envíos duplicados automáticos
+    await videoScheduler.setLastSendTime(groupId);
+    
+    const result = {
+      success: true,
+      message: 'Video enviado correctamente desde la interfaz web',
+      sentAt: new Date().toISOString()
+    };
+    
     console.log('✅ RESULTADO del envío:', result);
     res.json(result);
   } catch (error) {
@@ -651,40 +753,30 @@ app.post('/logout', async (req, res) => {
   }
 });
 
-// Configurar programación automática ROBUSTA cada 3 horas
-if (process.env.SCHEDULE) {
-  console.log(`⏰ Configurando cron job robusto: ${process.env.SCHEDULE}`);
-  
-  cron.schedule(process.env.SCHEDULE, async () => {
-    console.log('🔄 CRON JOB EJECUTÁNDOSE - Enviando video programado...');
-    try {
-      await sendYouTubeShort();
-      console.log('✅ Video enviado por cron job exitosamente');
-    } catch (error) {
-      console.error('❌ ERROR en cron job:', error.message);
-      // Reintentar una vez después de 30 segundos
-      setTimeout(async () => {
-        try {
-          console.log('🔄 REINTENTANDO envío por cron job...');
-          await sendYouTubeShort();
-          console.log('✅ Video enviado en reintento exitosamente');
-        } catch (retryError) {
-          console.error('❌ ERROR en reintento de cron job:', retryError.message);
-        }
-      }, 30000);
-    }
-  }, {
-    scheduled: true,
-    timezone: "America/New_York"
-  });
-  
-  console.log('✅ Cron job configurado y activo');
-}
+// VideoSchedulerService se inicia automáticamente al importarlo
+console.log('🔄 VideoSchedulerService iniciado - Videos cada 3 HORAS EXACTAS');
+console.log('📊 Para ver estado del scheduler: GET /scheduler-status');
 
 // Endpoint para probar SSE manualmente
 app.get('/test-sse', (req, res) => {
   broadcastSSE('test', { message: 'Test SSE funcionando' });
   res.json({ success: true, message: 'Evento SSE de prueba enviado' });
+});
+
+// Endpoint para obtener estado del VideoSchedulerService
+app.get('/scheduler-status', async (req, res) => {
+  try {
+    const status = await videoScheduler.getStatus();
+    res.json({
+      success: true,
+      scheduler: status
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 // Endpoint para probar video-sent manualmente
@@ -766,6 +858,9 @@ app.get('/events', (req, res) => {
     sseClients = sseClients.filter(client => client !== res);
   });
 });
+
+// Limpiar archivos de autenticación al inicio para forzar nuevo QR
+cleanAuthFiles();
 
 // Inicializar WhatsApp y servidor
 initializeWhatsApp();
