@@ -4,10 +4,11 @@ const path = require('path');
 class VideoSchedulerService {
   constructor() {
     if (VideoSchedulerService.instance) {
+      console.log('🔄 VideoSchedulerService iniciado - Videos cada 6 HORAS EXACTAS');
       return VideoSchedulerService.instance;
     }
     
-    this.INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 HORAS EXACTAS - NO CAMBIAR
+    this.INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 HORAS EXACTAS - NO CAMBIAR
     this.CHECK_INTERVAL = 15 * 60 * 1000; // Verificar cada 15 minutos
     this.CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // Limpiar cada 24 horas
     this.configFile = path.join(process.cwd(), 'video_schedule.json');
@@ -205,12 +206,12 @@ class VideoSchedulerService {
 
     const timeSinceLastSend = now - lastSend.timestamp;
     
-    // VERIFICACIÓN ESTRICTA: DEBE haber pasado EXACTAMENTE 3 horas o más
+    // VERIFICACIÓN ESTRICTA: DEBE haber pasado EXACTAMENTE 6 horas o más
     const canSend = timeSinceLastSend >= this.INTERVAL_MS;
 
     if (canSend) {
       const hoursWaited = Math.round(timeSinceLastSend / (1000 * 60 * 60) * 10) / 10;
-      this.log('info', '✅ VIDEO PUEDE SER ENVIADO - Han pasado 3+ horas', { 
+      this.log('info', '✅ VIDEO PUEDE SER ENVIADO - Han pasado 6+ horas', { 
         groupId, 
         lastSendTime: lastSend.utcDate,
         hoursWaited,
@@ -241,7 +242,7 @@ class VideoSchedulerService {
       }
       
       // Solo mostrar logs detallados cuando faltan menos de 30 minutos
-      this.log('debug', '⏳ VIDEO NO PUEDE SER ENVIADO - No han pasado 3 horas completas', {
+      this.log('debug', '⏳ VIDEO NO PUEDE SER ENVIADO - No han pasado 6 horas completas', {
         groupId,
         remainingMinutes,
         remainingHours,
@@ -263,10 +264,10 @@ class VideoSchedulerService {
   }
 
   async sendVideoWithRetry(groupId, sendFunction) {
-    // VERIFICACIÓN CRÍTICA: Solo proceder si han pasado exactamente 3 horas
+    // VERIFICACIÓN CRÍTICA: Solo proceder si han pasado exactamente 6 horas
     const canSendResult = await this.canSendVideo(groupId);
     if (!canSendResult.canSend) {
-      this.log('debug', '🚫 ENVÍO BLOQUEADO - No han pasado 3 horas exactas', canSendResult);
+      this.log('debug', '🚫 ENVÍO BLOQUEADO - No han pasado 6 horas exactas', canSendResult);
       return false;
     }
 
@@ -283,7 +284,7 @@ class VideoSchedulerService {
     // Intentar envío con reintentos
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       try {
-        this.log('info', '🚀 INICIANDO ENVÍO DE VIDEO - 3 HORAS EXACTAS CUMPLIDAS', { 
+        this.log('info', '🚀 INICIANDO ENVÍO DE VIDEO - 6 HORAS EXACTAS CUMPLIDAS', { 
           groupId, 
           attempt, 
           maxAttempts: this.retryAttempts,
@@ -297,7 +298,7 @@ class VideoSchedulerService {
         await this.setLastSendTime(groupId);
         this.circuitBreaker = { failures: 0, isOpen: false, nextAttempt: 0 };
         
-        this.log('info', '✅ VIDEO ENVIADO EXITOSAMENTE - PRÓXIMO ENVÍO EN 3 HORAS', { 
+        this.log('info', '✅ VIDEO ENVIADO EXITOSAMENTE - PRÓXIMO ENVÍO EN 6 HORAS', { 
           groupId, 
           attempt,
           sentAt: new Date().toISOString(),
@@ -345,10 +346,10 @@ class VideoSchedulerService {
       this.checkAndSendVideo();
     }, this.CHECK_INTERVAL);
 
-    this.log('info', '🔄 VIDEO SCHEDULER INICIADO - ENVÍO CADA 3 HORAS EXACTAS', { 
+    this.log('info', '🔄 VIDEO SCHEDULER INICIADO - ENVÍO CADA 6 HORAS EXACTAS', {
       checkIntervalMinutes: this.CHECK_INTERVAL / 1000 / 60,
-      sendIntervalHours: this.INTERVAL_MS / 1000 / 60 / 60,
-      strictMode: 'EXACTLY_3_HOURS',
+      sendIntervalHours: 6,
+      strictMode: 'EXACTLY_6_HOURS',
       configFile: this.configFile,
       note: 'Esperando conexión WhatsApp antes de verificar envíos'
     });
@@ -366,19 +367,19 @@ class VideoSchedulerService {
       this.log('debug', '🔍 VERIFICANDO SI PUEDEN ENVIARSE VIDEOS', { 
         groupId, 
         time: new Date().toISOString(),
-        requiredIntervalHours: 3
+        requiredIntervalHours: 6
       });
       
       const success = await this.sendVideoWithRetry(groupId, async () => {
         // 🚨 CRÍTICO: REEMPLAZA ESTA FUNCIÓN CON TU LÓGICA ACTUAL DE ENVÍO
-        // Esta función SOLO se ejecutará si han pasado exactamente 3 horas
+        // Esta función SOLO se ejecutará si han pasado exactamente 6 horas
         await this.executeVideoSend();
       });
 
       if (success) {
-        this.log('info', '✅ ENVÍO PROGRAMADO COMPLETADO - PRÓXIMO EN 3 HORAS', { groupId });
+        this.log('info', '✅ ENVÍO PROGRAMADO COMPLETADO - PRÓXIMO EN 6 HORAS', { groupId });
       } else {
-        this.log('debug', '⏳ ENVÍO OMITIDO - AÚN NO HAN PASADO 3 HORAS COMPLETAS', { groupId });
+        this.log('debug', '⏳ ENVÍO OMITIDO - AÚN NO HAN PASADO 6 HORAS COMPLETAS', { groupId });
       }
     } catch (error) {
       this.log('error', 'Scheduler check failed', { error: error.message });
