@@ -148,7 +148,7 @@ curl -X POST http://localhost:3000/send-youtube-short
 
 ### Envíos automáticos (cron)
 
-Si configuras `SCHEDULE` en `.env`, el servidor programará envíos automáticos según la expresión cron. Ejemplo: `0 */3 * * *` (cada 3 horas).
+Si configuras `SCHEDULE` en `.env`, el servidor programará envíos automáticos según la expresión cron. Ejemplo: `0 */6 * * *` (cada 6 horas).
 
 **Importante**: El bot está configurado para enviar mensajes exclusivamente al grupo "Block". Asegúrate de:
 

@@ -297,7 +297,7 @@ async function initializeWhatsApp() {
                   try {
                     await videoScheduler.executeVideoSend();
                     await videoScheduler.setLastSendTime(groupId);
-                    console.log('✅ Primer video enviado - Contador de 3 horas iniciado');
+                    console.log('✅ Primer video enviado - Contador de 6 horas iniciado');
                   } catch (error) {
                     console.error('❌ Error enviando primer video:', error.message);
                   }
@@ -754,7 +754,7 @@ app.post('/logout', async (req, res) => {
 });
 
 // VideoSchedulerService se inicia automáticamente al importarlo
-console.log('🔄 VideoSchedulerService iniciado - Videos cada 3 HORAS EXACTAS');
+console.log('🔄 VideoSchedulerService iniciado - Videos cada 6 HORAS EXACTAS');
 console.log('📊 Para ver estado del scheduler: GET /scheduler-status');
 
 // Endpoint para probar SSE manualmente
