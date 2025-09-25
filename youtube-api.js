@@ -1,8 +1,8 @@
-// Módulo para buscar y descargar YouTube Shorts - ORDEN: YouTube Data API v3 → ytdl-core
+// Módulo para buscar y descargar YouTube Shorts - ORDEN: YouTube Data API v3 → node-youtube-dl
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const ytdl = require('ytdl-core');
+const youtubeDl = require('youtube-dl-exec');
 
 require('dotenv').config();
 
@@ -158,66 +158,23 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
   }
 }
 
-// Función para descargar un YouTube Short usando ytdl-core
+// Función para descargar un YouTube Short usando youtube-dl-exec
 async function downloadYouTubeShort(videoUrl, outputPath) {
   console.log(`Descargando YouTube Short: ${videoUrl}`);
   
   try {
-    // Configuración simplificada para ytdl-core original
-    const info = await ytdl.getInfo(videoUrl, {
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-        }
-      }
+    const result = await youtubeDl(videoUrl, {
+      format: 'best[height<=720]',
+      noPlaylist: true,
+      output: outputPath,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
     });
-    
-    const format = ytdl.chooseFormat(info.formats, { 
-      quality: 'highest',
-      filter: 'audioandvideo'
-    });
-    
-    if (!format) {
-      throw new Error('No se encontró un formato adecuado');
-    }
-    
-    return new Promise((resolve, reject) => {
-      const stream = ytdl(videoUrl, { 
-        format: format,
-        requestOptions: {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-          }
-        }
-      });
-      const writeStream = fs.createWriteStream(outputPath);
-      
-      stream.pipe(writeStream);
-      
-      stream.on('error', (error) => {
-        console.error('Error en el stream de descarga:', error);
-        reject(error);
-      });
-      
-      writeStream.on('finish', () => {
-        console.log('✅ Descarga completada:', outputPath);
-        resolve(outputPath);
-      });
-      
-      writeStream.on('error', (error) => {
-        console.error('Error escribiendo archivo:', error);
-        reject(error);
-      });
-    });
+
+    console.log(`✅ Video descargado exitosamente: ${outputPath}`);
+    return outputPath;
     
   } catch (error) {
-    console.error('Error con ytdl-core:', error.message);
+    console.error('Error con youtube-dl-exec:', error.message);
     throw new Error('Error al descargar el video');
   }
 }

@@ -14,7 +14,7 @@
     "youtube": "node youtube-api.js"
   },
   "dependencies": {
-    "ytdl-core": "^4.11.5",
+    "youtube-dl-exec": "^2.4.13",
     "@google/genai": "^1.19.0",
     "@google/generative-ai": "^0.21.0",
     "@whiskeysockets/baileys": "^6.5.0",
