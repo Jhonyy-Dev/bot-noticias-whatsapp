@@ -2,7 +2,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-// Ya no necesitamos librerías de descarga - enviaremos enlaces directos
+const fetch = require('node-fetch');
 
 require('dotenv').config();
 
@@ -187,19 +187,59 @@ async function getVideoInfo(videoUrl) {
   }
 }
 
-// Función de compatibilidad (mantener el mismo nombre para no romper el código existente)
+// DESCARGA REAL DE VIDEO usando API externa (funciona en Railway)
 async function downloadYouTubeShort(videoUrl, outputPath) {
-  console.log(`🔗 NUEVA ESTRATEGIA: Enviando enlace en lugar de descargar`);
+  console.log(`🎬 DESCARGANDO VIDEO REAL: ${videoUrl}`);
   
-  // Ya no descargamos, solo retornamos la URL para enviar como enlace
-  const videoInfo = await getVideoInfo(videoUrl);
-  
-  // Crear un archivo temporal con la URL (para compatibilidad)
-  const linkContent = `🎬 Video de YouTube:\n${videoInfo.shortUrl}\n\n📱 Toca el enlace para ver el video`;
-  fs.writeFileSync(outputPath, linkContent, 'utf8');
-  
-  console.log(`✅ Enlace preparado: ${videoInfo.shortUrl}`);
-  return outputPath;
+  try {
+    // Usar API pública para descargar (bypass de Railway)
+    const apiUrl = `https://api.cobalt.tools/api/json`;
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        url: videoUrl,
+        vQuality: '720',
+        vFormat: 'mp4',
+        isAudioOnly: false,
+        isNoTTWatermark: true
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.status === 'success' && data.url) {
+      console.log(`📥 Descargando desde: ${data.url}`);
+      
+      // Descargar el video desde la URL proporcionada
+      const videoResponse = await fetch(data.url);
+      const buffer = await videoResponse.buffer();
+      
+      // Guardar el video
+      fs.writeFileSync(outputPath, buffer);
+      
+      const stats = fs.statSync(outputPath);
+      console.log(`✅ Video descargado: ${outputPath} (${Math.round(stats.size / 1024)} KB)`);
+      
+      return outputPath;
+    } else {
+      throw new Error('No se pudo obtener URL de descarga');
+    }
+    
+  } catch (error) {
+    console.error('Error con API externa:', error.message);
+    
+    // FALLBACK: Si falla la API, usar estrategia de enlace
+    console.log('🔄 Fallback: Usando enlace como respaldo');
+    const videoInfo = await getVideoInfo(videoUrl);
+    const linkContent = `🎬 Video de YouTube:\n${videoInfo.shortUrl}\n\n📱 Toca el enlace para ver el video`;
+    fs.writeFileSync(outputPath, linkContent, 'utf8');
+    return outputPath;
+  }
 }
 
 module.exports = {

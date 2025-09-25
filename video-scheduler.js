@@ -480,18 +480,32 @@ class VideoSchedulerService {
         selectedTopic
       );
       
-      // Leer el contenido del enlace (ya no es un video, es texto con URL)
-      const linkContent = fs.readFileSync(outputPath, 'utf8');
+      // Verificar si es un archivo de video o texto (fallback)
+      const stats = fs.statSync(outputPath);
+      const isVideoFile = stats.size > 1000; // Si es mayor a 1KB, probablemente es video
       
-      // Crear mensaje con enlace y descripción mejorada
-      const fullMessage = `${description}\n\n${linkContent}`;
-      
-      // Enviar mensaje de texto con enlace al grupo
-      await waSocket.sendMessage(targetGroup.id, { 
-        text: fullMessage
-      });
-      
-      this.log('info', '✅ Enlace de video enviado correctamente');
+      if (isVideoFile) {
+        // Leer el video y enviarlo
+        const videoBuffer = fs.readFileSync(outputPath);
+        
+        await waSocket.sendMessage(targetGroup.id, { 
+          video: videoBuffer,
+          caption: description,
+          gifPlayback: false
+        });
+        
+        this.log('info', '✅ Video descargado y enviado correctamente');
+      } else {
+        // Es un archivo de texto (fallback), enviar como mensaje
+        const linkContent = fs.readFileSync(outputPath, 'utf8');
+        const fullMessage = `${description}\n\n${linkContent}`;
+        
+        await waSocket.sendMessage(targetGroup.id, { 
+          text: fullMessage
+        });
+        
+        this.log('info', '✅ Enlace de video enviado (fallback)');
+      }
       
       // Eliminar el archivo después de enviarlo
       fs.unlinkSync(outputPath);
