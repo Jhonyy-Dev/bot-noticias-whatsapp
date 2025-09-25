@@ -2,7 +2,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const ytdl = require('ytdl-core');
+const play = require('play-dl');
 
 require('dotenv').config();
 
@@ -158,50 +158,39 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
   }
 }
 
-// Función para descargar un YouTube Short usando ytdl-core con configuración robusta
+// Función para descargar un YouTube Short usando play-dl (más robusto)
 async function downloadYouTubeShort(videoUrl, outputPath) {
   console.log(`Descargando YouTube Short: ${videoUrl}`);
   
   try {
-    // Configuración robusta para evitar bloqueos
-    const info = await ytdl.getInfo(videoUrl, {
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept': '*/*',
-          'Sec-Fetch-Mode': 'navigate'
-        }
-      }
-    });
+    // Obtener información del video con play-dl
+    const info = await play.video_info(videoUrl);
     
-    // Buscar formato de video más compatible
-    const format = ytdl.chooseFormat(info.formats, { 
-      quality: 'highestvideo',
-      filter: format => format.container === 'mp4' && format.hasVideo && format.hasAudio
-    }) || ytdl.chooseFormat(info.formats, { quality: 'highest' });
-    
-    if (!format) {
-      throw new Error('No se encontró un formato compatible');
+    if (!info) {
+      throw new Error('No se pudo obtener información del video');
     }
     
+    console.log(`📹 Video: ${info.video_details.title}`);
+    console.log(`👤 Canal: ${info.video_details.channel?.name}`);
+    
+    // Obtener stream de descarga
+    const stream = await play.stream(videoUrl, {
+      quality: 2, // Calidad media para Shorts
+      discordPlayerCompatibility: false
+    });
+    
+    if (!stream || !stream.stream) {
+      throw new Error('No se pudo obtener el stream del video');
+    }
+    
+    // Descargar el video
     return new Promise((resolve, reject) => {
-      const stream = ytdl(videoUrl, { 
-        format: format,
-        requestOptions: {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept': '*/*'
-          }
-        }
-      });
-      
       const writeStream = fs.createWriteStream(outputPath);
-      stream.pipe(writeStream);
       
-      stream.on('error', (error) => {
-        console.error('Error en descarga:', error.message);
+      stream.stream.pipe(writeStream);
+      
+      stream.stream.on('error', (error) => {
+        console.error('Error en stream de play-dl:', error.message);
         reject(new Error('Error al descargar el video'));
       });
       
@@ -217,7 +206,7 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
     });
     
   } catch (error) {
-    console.error('Error con ytdl-core:', error.message);
+    console.error('Error con play-dl:', error.message);
     throw new Error('Error al descargar el video');
   }
 }
