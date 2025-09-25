@@ -191,28 +191,37 @@ async function getVideoInfo(videoUrl) {
 async function downloadYouTubeShort(videoUrl, outputPath) {
   console.log(`🎬 DESCARGANDO VIDEO REAL: ${videoUrl}`);
   
-  // Lista de APIs para probar (en orden de preferencia)
+  // Lista de APIs REALES para descargar YouTube a MP4 (servicios web funcionando)
   const apis = [
     {
-      name: 'SaveFrom.net',
-      url: 'https://sf-converter.com/api/convert',
+      name: 'YT1S.biz',
+      url: 'https://v1.yt1s.biz/api/ajaxSearch/index',
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: (url) => JSON.stringify({ url, format: 'mp4', quality: '720p' })
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      body: (url) => `q=${encodeURIComponent(url)}&vt=mp4`
     },
     {
-      name: 'Y2Mate API',
-      url: 'https://www.y2mate.com/mates/analyzeV2/ajax',
+      name: 'TurboScribe',
+      url: 'https://turboscribe.ai/api/download/youtube',
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: (url) => `k_query=${encodeURIComponent(url)}&k_page=home&hl=en&q_auto=0`
+      headers: { 
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      body: (url) => JSON.stringify({ url: url, format: 'mp4', quality: '720p' })
     },
     {
-      name: 'SnapSave API',
-      url: 'https://snapsave.app/action.php?lang=en',
+      name: 'SSVid.net',
+      url: 'https://ssvid.net/api/convert',
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: (url) => `url=${encodeURIComponent(url)}`
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      body: (url) => `url=${encodeURIComponent(url)}&format=mp4&quality=720p`
     }
   ];
   
@@ -230,13 +239,53 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
       const data = await response.json();
       console.log(`📊 Respuesta de ${api.name}:`, data);
       
-      // Buscar URL de descarga en la respuesta
+      // Buscar URL de descarga según el servicio específico
       let downloadUrl = null;
       
-      if (data.url) downloadUrl = data.url;
-      if (data.dlink) downloadUrl = data.dlink;
-      if (data.links && data.links[0]) downloadUrl = data.links[0].url;
-      if (data.result && data.result.url) downloadUrl = data.result.url;
+      if (api.name === 'YT1S.biz') {
+        // YT1S puede requerir dos pasos: 1) Análisis 2) Conversión
+        if (data.status === 'ok' && data.result) {
+          if (data.result.links && data.result.links.mp4) {
+            // Respuesta directa con enlaces
+            const mp4Links = data.result.links.mp4;
+            downloadUrl = mp4Links['720']?.url || mp4Links['480']?.url || mp4Links['360']?.url;
+          } else if (data.result.vid && data.result.k) {
+            // Necesita segundo paso de conversión
+            console.log(`🔄 ${api.name}: Iniciando conversión...`);
+            try {
+              const convertResponse = await fetch('https://v1.yt1s.biz/api/ajaxConvert/index', {
+                method: 'POST',
+                headers: api.headers,
+                body: `vid=${data.result.vid}&k=${data.result.k}`
+              });
+              const convertData = await convertResponse.json();
+              if (convertData.status === 'ok' && convertData.dlink) {
+                downloadUrl = convertData.dlink;
+              }
+            } catch (e) {
+              console.log(`❌ ${api.name}: Error en conversión:`, e.message);
+            }
+          }
+        }
+      } else if (api.name === 'TurboScribe') {
+        // TurboScribe devuelve { success: true, download_url: '...' }
+        if (data.success && data.download_url) {
+          downloadUrl = data.download_url;
+        }
+      } else if (api.name === 'SSVid.net') {
+        // SSVid devuelve { status: 'success', url: '...' }
+        if (data.status === 'success' && data.url) {
+          downloadUrl = data.url;
+        }
+      }
+      
+      // Fallback para otros formatos de respuesta
+      if (!downloadUrl) {
+        if (data.url) downloadUrl = data.url;
+        if (data.dlink) downloadUrl = data.dlink;
+        if (data.links && data.links[0]) downloadUrl = data.links[0].url;
+        if (data.result && data.result.url) downloadUrl = data.result.url;
+      }
       
       if (downloadUrl) {
         console.log(`📥 Descargando desde ${api.name}: ${downloadUrl}`);
