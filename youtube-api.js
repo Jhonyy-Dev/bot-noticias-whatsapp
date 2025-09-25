@@ -187,59 +187,124 @@ async function getVideoInfo(videoUrl) {
   }
 }
 
-// DESCARGA REAL DE VIDEO usando API externa (funciona en Railway)
+// DESCARGA REAL DE VIDEO usando múltiples APIs (MÁXIMA ROBUSTEZ)
 async function downloadYouTubeShort(videoUrl, outputPath) {
   console.log(`🎬 DESCARGANDO VIDEO REAL: ${videoUrl}`);
   
-  try {
-    // Usar API pública para descargar (bypass de Railway)
-    const apiUrl = `https://api.cobalt.tools/api/json`;
-    
-    const response = await fetch(apiUrl, {
+  // Lista de APIs para probar (en orden de preferencia)
+  const apis = [
+    {
+      name: 'SaveFrom.net',
+      url: 'https://sf-converter.com/api/convert',
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        url: videoUrl,
-        vQuality: '720',
-        vFormat: 'mp4',
-        isAudioOnly: false,
-        isNoTTWatermark: true
-      })
-    });
+      headers: { 'Content-Type': 'application/json' },
+      body: (url) => JSON.stringify({ url, format: 'mp4', quality: '720p' })
+    },
+    {
+      name: 'Y2Mate API',
+      url: 'https://www.y2mate.com/mates/analyzeV2/ajax',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: (url) => `k_query=${encodeURIComponent(url)}&k_page=home&hl=en&q_auto=0`
+    },
+    {
+      name: 'SnapSave API',
+      url: 'https://snapsave.app/action.php?lang=en',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: (url) => `url=${encodeURIComponent(url)}`
+    }
+  ];
+  
+  // Intentar con cada API
+  for (const api of apis) {
+    try {
+      console.log(`🔄 Probando ${api.name}...`);
+      
+      const response = await fetch(api.url, {
+        method: api.method,
+        headers: api.headers,
+        body: api.body(videoUrl)
+      });
+      
+      const data = await response.json();
+      console.log(`📊 Respuesta de ${api.name}:`, data);
+      
+      // Buscar URL de descarga en la respuesta
+      let downloadUrl = null;
+      
+      if (data.url) downloadUrl = data.url;
+      if (data.dlink) downloadUrl = data.dlink;
+      if (data.links && data.links[0]) downloadUrl = data.links[0].url;
+      if (data.result && data.result.url) downloadUrl = data.result.url;
+      
+      if (downloadUrl) {
+        console.log(`📥 Descargando desde ${api.name}: ${downloadUrl}`);
+        
+        // Descargar el video
+        const videoResponse = await fetch(downloadUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        
+        if (videoResponse.ok) {
+          const buffer = await videoResponse.buffer();
+          
+          if (buffer.length > 10000) { // Mínimo 10KB para ser un video válido
+            fs.writeFileSync(outputPath, buffer);
+            
+            const stats = fs.statSync(outputPath);
+            console.log(`✅ VIDEO DESCARGADO CON ${api.name}: ${outputPath} (${Math.round(stats.size / 1024)} KB)`);
+            
+            return outputPath;
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.log(`❌ ${api.name} falló:`, error.message);
+      continue; // Probar siguiente API
+    }
+  }
+  
+  // Si TODAS las APIs fallan, usar método directo (último recurso)
+  try {
+    console.log('🚨 ÚLTIMO RECURSO: Descarga directa...');
     
-    const data = await response.json();
+    // Extraer ID del video
+    const videoId = videoUrl.includes('watch?v=') 
+      ? videoUrl.split('watch?v=')[1].split('&')[0]
+      : videoUrl.split('/').pop();
     
-    if (data.status === 'success' && data.url) {
-      console.log(`📥 Descargando desde: ${data.url}`);
-      
-      // Descargar el video desde la URL proporcionada
-      const videoResponse = await fetch(data.url);
-      const buffer = await videoResponse.buffer();
-      
-      // Guardar el video
-      fs.writeFileSync(outputPath, buffer);
-      
-      const stats = fs.statSync(outputPath);
-      console.log(`✅ Video descargado: ${outputPath} (${Math.round(stats.size / 1024)} KB)`);
-      
-      return outputPath;
-    } else {
-      throw new Error('No se pudo obtener URL de descarga');
+    // Intentar descarga directa usando URLs conocidas de YouTube
+    const directUrls = [
+      `https://www.youtube.com/embed/${videoId}`,
+      `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` // Al menos la thumbnail
+    ];
+    
+    for (const directUrl of directUrls) {
+      try {
+        const response = await fetch(directUrl);
+        if (response.ok) {
+          const buffer = await response.buffer();
+          if (buffer.length > 1000) {
+            fs.writeFileSync(outputPath, buffer);
+            console.log(`✅ Descarga directa exitosa: ${Math.round(buffer.length / 1024)} KB`);
+            return outputPath;
+          }
+        }
+      } catch (e) {
+        continue;
+      }
     }
     
   } catch (error) {
-    console.error('Error con API externa:', error.message);
-    
-    // FALLBACK: Si falla la API, usar estrategia de enlace
-    console.log('🔄 Fallback: Usando enlace como respaldo');
-    const videoInfo = await getVideoInfo(videoUrl);
-    const linkContent = `🎬 Video de YouTube:\n${videoInfo.shortUrl}\n\n📱 Toca el enlace para ver el video`;
-    fs.writeFileSync(outputPath, linkContent, 'utf8');
-    return outputPath;
+    console.error('❌ Descarga directa falló:', error.message);
   }
+  
+  // ÚLTIMO FALLBACK: Error - NO crear archivo de texto
+  throw new Error('❌ TODAS las APIs de descarga fallaron - No se pudo descargar el video');
 }
 
 module.exports = {

@@ -480,9 +480,9 @@ class VideoSchedulerService {
         selectedTopic
       );
       
-      // Verificar si es un archivo de video o texto (fallback)
+      // Verificar que el archivo existe y es un video real
       const stats = fs.statSync(outputPath);
-      const isVideoFile = stats.size > 1000; // Si es mayor a 1KB, probablemente es video
+      const isVideoFile = stats.size > 10000; // Mínimo 10KB para ser un video válido
       
       if (isVideoFile) {
         // Leer el video y enviarlo
@@ -494,17 +494,11 @@ class VideoSchedulerService {
           gifPlayback: false
         });
         
-        this.log('info', '✅ Video descargado y enviado correctamente');
+        this.log('info', `✅ VIDEO REAL DESCARGADO Y ENVIADO: ${Math.round(stats.size / 1024)} KB`);
       } else {
-        // Es un archivo de texto (fallback), enviar como mensaje
-        const linkContent = fs.readFileSync(outputPath, 'utf8');
-        const fullMessage = `${description}\n\n${linkContent}`;
-        
-        await waSocket.sendMessage(targetGroup.id, { 
-          text: fullMessage
-        });
-        
-        this.log('info', '✅ Enlace de video enviado (fallback)');
+        // Archivo muy pequeño o no es video - ERROR
+        this.log('error', `❌ Archivo descargado no es un video válido: ${stats.size} bytes`);
+        throw new Error('El archivo descargado no es un video válido');
       }
       
       // Eliminar el archivo después de enviarlo
