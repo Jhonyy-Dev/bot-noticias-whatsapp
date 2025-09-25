@@ -2,21 +2,9 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const play = require('play-dl');
+const YTDlpWrap = require('yt-dlp-wrap').default;
 
 require('dotenv').config();
-
-// Inicializar play-dl
-(async () => {
-  try {
-    await play.setToken({
-      useragent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36']
-    });
-    console.log('✅ play-dl inicializado correctamente');
-  } catch (error) {
-    console.log('⚠️ play-dl sin token personalizado:', error.message);
-  }
-})();
 
 // Configurar el directorio de descargas
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
@@ -170,75 +158,49 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
   }
 }
 
-// Función para descargar un YouTube Short usando play-dl (más robusto)
+// Función para descargar un YouTube Short usando yt-dlp-wrap (LA MÁS ROBUSTA)
 async function downloadYouTubeShort(videoUrl, outputPath) {
   console.log(`Descargando YouTube Short: ${videoUrl}`);
   
   try {
-    // Normalizar URL de YouTube
-    let normalizedUrl = videoUrl;
-    if (videoUrl.includes('youtu.be/')) {
-      const videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
-      normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    // Crear instancia de yt-dlp
+    const ytDlpWrap = new YTDlpWrap();
+    
+    // Configuración robusta para yt-dlp
+    const options = [
+      '--format=best[height<=720][ext=mp4]', // MP4, máximo 720p
+      '--no-playlist',
+      '--no-warnings',
+      '--extract-flat=false',
+      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+      '--referer=https://www.youtube.com/',
+      '--add-header=Accept-Language:en-US,en;q=0.9',
+      `--output=${outputPath}`
+    ];
+    
+    console.log(`🔗 Descargando: ${videoUrl}`);
+    console.log(`📁 Destino: ${outputPath}`);
+    
+    // Ejecutar descarga con yt-dlp
+    const result = await ytDlpWrap.execPromise([
+      videoUrl,
+      ...options
+    ]);
+    
+    console.log('📊 Resultado yt-dlp:', result);
+    
+    // Verificar si el archivo se descargó
+    if (!fs.existsSync(outputPath)) {
+      throw new Error('El archivo no se descargó correctamente');
     }
     
-    console.log(`🔗 URL normalizada: ${normalizedUrl}`);
+    const stats = fs.statSync(outputPath);
+    console.log(`✅ Video descargado exitosamente: ${outputPath} (${Math.round(stats.size / 1024)} KB)`);
     
-    // Verificar si es una URL válida de YouTube
-    if (!play.yt_validate(normalizedUrl)) {
-      throw new Error('URL de YouTube no válida');
-    }
-    
-    // Obtener información del video con play-dl
-    const info = await play.video_info(normalizedUrl);
-    
-    if (!info) {
-      throw new Error('No se pudo obtener información del video');
-    }
-    
-    console.log(`📹 Video: ${info.video_details.title}`);
-    console.log(`👤 Canal: ${info.video_details.channel?.name}`);
-    
-    // Obtener stream de descarga con configuración robusta
-    const stream = await play.stream(normalizedUrl, {
-      quality: 1, // Calidad baja para evitar problemas
-      discordPlayerCompatibility: false,
-      seek: 0
-    });
-    
-    if (!stream || !stream.stream) {
-      throw new Error('No se pudo obtener el stream del video');
-    }
-    
-    // Descargar el video
-    return new Promise((resolve, reject) => {
-      const writeStream = fs.createWriteStream(outputPath);
-      
-      stream.stream.pipe(writeStream);
-      
-      stream.stream.on('error', (error) => {
-        console.error('Error en stream de play-dl:', error.message);
-        reject(new Error('Error al descargar el video'));
-      });
-      
-      writeStream.on('finish', () => {
-        console.log(`✅ Video descargado exitosamente: ${outputPath}`);
-        resolve(outputPath);
-      });
-      
-      writeStream.on('error', (error) => {
-        console.error('Error escribiendo archivo:', error.message);
-        reject(error);
-      });
-      
-      // Timeout de seguridad
-      setTimeout(() => {
-        reject(new Error('Timeout en descarga de video'));
-      }, 60000); // 60 segundos
-    });
+    return outputPath;
     
   } catch (error) {
-    console.error('Error con play-dl:', error.message);
+    console.error('Error con yt-dlp-wrap:', error.message);
     throw new Error('Error al descargar el video');
   }
 }
