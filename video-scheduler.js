@@ -399,16 +399,8 @@ class VideoSchedulerService {
     this.log('info', '🎬 EJECUTANDO ENVÍO DE VIDEO...');
     
     // Importar módulos necesarios
-    const { searchYouTubeShorts, downloadYouTubeShort } = require('./youtube-api');
-    
-    // Función auxiliar para obtener info del video
-    const getVideoInfo = (videoUrl) => {
-      const videoId = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)?.[1];
-      return {
-        shortUrl: `https://youtu.be/${videoId}`,
-        id: videoId
-      };
-    };
+    const { searchYouTubeShorts } = require('./youtube-api');
+    const VideoDownloader = require('./video-downloader'); // NUEVA LIBRERÍA ESPECIALIZADA
     const { enhanceDescription } = require('./gemini-ai');
     const fs = require('fs');
     const path = require('path');
@@ -463,24 +455,19 @@ class VideoSchedulerService {
       const selectedVideo = videos[Math.floor(Math.random() * Math.min(videos.length, 10))];
       this.log('info', `Video seleccionado: ${selectedVideo.title} por ${selectedVideo.channelTitle}`);
       
-      // Crear directorio para descargas si no existe
-      const downloadsDir = path.join(__dirname, 'downloads');
-      if (!fs.existsSync(downloadsDir)) {
-        fs.mkdirSync(downloadsDir, { recursive: true });
-      }
+      // USAR NUEVA LIBRERÍA ESPECIALIZADA PARA DESCARGAR VIDEO REAL
+      const downloader = new VideoDownloader();
       
-      // Nombre del archivo de salida
-      const outputFilename = `${selectedVideo.id}.mp4`;
-      const outputPath = path.join(downloadsDir, outputFilename);
+      this.log('info', `🚀 DESCARGANDO VIDEO REAL CON MÚLTIPLES MÉTODOS: ${selectedVideo.url}`);
+      const outputPath = await downloader.downloadVideo(selectedVideo.url, `${selectedVideo.id}.mp4`);
       
-      // Descargar el video
-      this.log('info', `Descargando video: ${selectedVideo.url}`);
-      await downloadYouTubeShort(selectedVideo.url, outputPath);
-      
-      // Verificar si el archivo existe
+      // Verificar que el archivo descargado sea válido
       if (!fs.existsSync(outputPath)) {
-        throw new Error('El archivo de video no se encontró después de la descarga');
+        throw new Error('❌ No se pudo descargar el video con ningún método');
       }
+      
+      const stats = fs.statSync(outputPath);
+      this.log('info', `✅ VIDEO REAL DESCARGADO: ${Math.round(stats.size / 1024)} KB`);
       
       // Generar descripción mejorada
       const description = await enhanceDescription(
@@ -489,42 +476,17 @@ class VideoSchedulerService {
         selectedTopic
       );
       
-      // Verificar que el archivo existe y determinar tipo de contenido
-      const stats = fs.statSync(outputPath);
-      const contentBuffer = fs.readFileSync(outputPath);
+      // Leer el archivo
+      const videoBuffer = fs.readFileSync(outputPath);
       
-      // Detectar si es imagen (JPEG) o video (MP4)
-      const isJPEG = contentBuffer[0] === 0xFF && contentBuffer[1] === 0xD8; // JPEG magic bytes
-      const isMP4 = contentBuffer.toString('hex', 0, 8).includes('66747970') || 
-                    contentBuffer[0] === 0x00 && contentBuffer[4] === 0x66;
+      // Enviar el video al grupo
+      await waSocket.sendMessage(targetGroup.id, { 
+        video: videoBuffer,
+        caption: description,
+        gifPlayback: false
+      });
       
-      if (isMP4 && stats.size > 50000) {
-        // Es un video MP4 válido
-        await waSocket.sendMessage(targetGroup.id, { 
-          video: contentBuffer,
-          caption: description,
-          gifPlayback: false
-        });
-        
-        this.log('info', `✅ VIDEO MP4 ENVIADO: ${Math.round(stats.size / 1024)} KB`);
-        
-      } else if (isJPEG && stats.size > 5000) {
-        // Es una imagen JPEG (thumbnail) - enviar como imagen con enlace
-        const videoInfo = await getVideoInfo(selectedVideo.url);
-        const messageWithLink = `${description}\n\n🎬 Ver video completo: ${videoInfo.shortUrl}`;
-        
-        await waSocket.sendMessage(targetGroup.id, { 
-          image: contentBuffer,
-          caption: messageWithLink
-        });
-        
-        this.log('info', `✅ THUMBNAIL + ENLACE ENVIADO: ${Math.round(stats.size / 1024)} KB`);
-        
-      } else {
-        // Archivo no válido
-        this.log('error', `❌ Archivo no válido: ${stats.size} bytes, tipo desconocido`);
-        throw new Error('El archivo descargado no es válido');
-      }
+      this.log('info', '✅ Video enviado correctamente');
       
       // Eliminar el archivo después de enviarlo
       fs.unlinkSync(outputPath);

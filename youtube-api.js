@@ -1,8 +1,8 @@
-// Módulo para buscar y descargar YouTube Shorts - ORDEN: YouTube Data API v3 → node-youtube-dl
+// Módulo para buscar y descargar YouTube Shorts - ORDEN: YouTube Data API v3 → ytdl-core
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');
+const ytdl = require('@distube/ytdl-core');
 
 require('dotenv').config();
 
@@ -158,89 +158,57 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
   }
 }
 
-// NUEVA ESTRATEGIA: No descargar videos, solo obtener información para enviar enlaces
-async function getVideoInfo(videoUrl) {
-  console.log(`📋 Obteniendo información del video: ${videoUrl}`);
-  
-  try {
-    // Extraer ID del video de la URL
-    const videoId = videoUrl.includes('watch?v=') 
-      ? videoUrl.split('watch?v=')[1].split('&')[0]
-      : videoUrl.split('/').pop();
-    
-    console.log(`🆔 Video ID: ${videoId}`);
-    
-    // Crear información básica del video (sin descarga)
-    const videoInfo = {
-      url: videoUrl,
-      id: videoId,
-      thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-      shortUrl: `https://youtu.be/${videoId}`
-    };
-    
-    console.log(`✅ Información del video obtenida: ${videoInfo.shortUrl}`);
-    return videoInfo;
-    
-  } catch (error) {
-    console.error('Error obteniendo información del video:', error.message);
-    throw new Error('Error al procesar el video');
-  }
-}
-
-// ESTRATEGIA SIMPLE Y CONFIABLE: Descargar thumbnail de alta calidad como placeholder
+// Función para descargar un YouTube Short usando @distube/ytdl-core
 async function downloadYouTubeShort(videoUrl, outputPath) {
-  console.log(`🎬 ESTRATEGIA ALTERNATIVA: Descargando contenido de YouTube`);
+  console.log(`Descargando YouTube Short: ${videoUrl}`);
   
   try {
-    // Extraer ID del video
-    const videoId = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)?.[1];
-    
-    if (!videoId) {
-      throw new Error('No se pudo extraer ID del video');
-    }
-    
-    console.log(`🆔 Video ID: ${videoId}`);
-    
-    // ESTRATEGIA: Descargar thumbnail de máxima calidad (funciona siempre)
-    const thumbnailUrls = [
-      `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
-      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
-    ];
-    
-    for (const thumbUrl of thumbnailUrls) {
-      try {
-        console.log(`📥 Probando thumbnail: ${thumbUrl}`);
-        
-        const response = await fetch(thumbUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          }
-        });
-        
-        if (response.ok) {
-          const buffer = await response.buffer();
-          
-          if (buffer.length > 5000) { // Mínimo 5KB para thumbnail válida
-            fs.writeFileSync(outputPath, buffer);
-            
-            console.log(`✅ THUMBNAIL DESCARGADA: ${Math.round(buffer.length / 1024)} KB`);
-            console.log(`📋 Nota: Se descargó thumbnail por limitaciones de APIs de video`);
-            
-            return outputPath;
-          }
-        }
-      } catch (e) {
-        console.log(`❌ Thumbnail falló: ${e.message}`);
-        continue;
+    // Crear agente ytdl con configuración actualizada
+    const agent = ytdl.createAgent([
+      {
+        "name": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       }
+    ]);
+    
+    const info = await ytdl.getInfo(videoUrl, { agent });
+    
+    const format = ytdl.chooseFormat(info.formats, { 
+      quality: 'highest',
+      filter: 'audioandvideo'
+    });
+    
+    if (!format) {
+      throw new Error('No se encontró un formato adecuado');
     }
     
-    throw new Error('No se pudo descargar ningún contenido del video');
+    return new Promise((resolve, reject) => {
+      const stream = ytdl(videoUrl, { 
+        format: format,
+        agent: agent
+      });
+      const writeStream = fs.createWriteStream(outputPath);
+      
+      stream.pipe(writeStream);
+      
+      stream.on('error', (error) => {
+        console.error('Error en el stream de descarga:', error);
+        reject(error);
+      });
+      
+      writeStream.on('finish', () => {
+        console.log('✅ Descarga completada:', outputPath);
+        resolve(outputPath);
+      });
+      
+      writeStream.on('error', (error) => {
+        console.error('Error escribiendo archivo:', error);
+        reject(error);
+      });
+    });
     
   } catch (error) {
-    console.error('Error en descarga alternativa:', error.message);
-    throw new Error('❌ No se pudo descargar contenido del video');
+    console.error('Error con @distube/ytdl-core:', error.message);
+    throw new Error('Error al descargar el video');
   }
 }
 
