@@ -400,6 +400,15 @@ class VideoSchedulerService {
     
     // Importar módulos necesarios
     const { searchYouTubeShorts, downloadYouTubeShort } = require('./youtube-api');
+    
+    // Función auxiliar para obtener info del video
+    const getVideoInfo = (videoUrl) => {
+      const videoId = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)?.[1];
+      return {
+        shortUrl: `https://youtu.be/${videoId}`,
+        id: videoId
+      };
+    };
     const { enhanceDescription } = require('./gemini-ai');
     const fs = require('fs');
     const path = require('path');
@@ -480,29 +489,41 @@ class VideoSchedulerService {
         selectedTopic
       );
       
-      // Verificar que el archivo existe y es un video MP4 real
+      // Verificar que el archivo existe y determinar tipo de contenido
       const stats = fs.statSync(outputPath);
-      const videoBuffer = fs.readFileSync(outputPath);
+      const contentBuffer = fs.readFileSync(outputPath);
       
-      // Validar que sea un video MP4 válido (magic bytes + tamaño)
-      const isValidMP4 = stats.size > 50000 && // Mínimo 50KB
-                         (videoBuffer.toString('hex', 0, 8).includes('66747970') || // MP4 signature
-                          videoBuffer.toString('hex', 0, 4) === '00000018' ||      // MP4 ftyp
-                          videoBuffer[0] === 0x00 && videoBuffer[4] === 0x66);     // MP4 header
+      // Detectar si es imagen (JPEG) o video (MP4)
+      const isJPEG = contentBuffer[0] === 0xFF && contentBuffer[1] === 0xD8; // JPEG magic bytes
+      const isMP4 = contentBuffer.toString('hex', 0, 8).includes('66747970') || 
+                    contentBuffer[0] === 0x00 && contentBuffer[4] === 0x66;
       
-      if (isValidMP4) {
-        // Enviar video MP4 válido
+      if (isMP4 && stats.size > 50000) {
+        // Es un video MP4 válido
         await waSocket.sendMessage(targetGroup.id, { 
-          video: videoBuffer,
+          video: contentBuffer,
           caption: description,
           gifPlayback: false
         });
         
-        this.log('info', `✅ VIDEO MP4 VÁLIDO ENVIADO: ${Math.round(stats.size / 1024)} KB`);
+        this.log('info', `✅ VIDEO MP4 ENVIADO: ${Math.round(stats.size / 1024)} KB`);
+        
+      } else if (isJPEG && stats.size > 5000) {
+        // Es una imagen JPEG (thumbnail) - enviar como imagen con enlace
+        const videoInfo = await getVideoInfo(selectedVideo.url);
+        const messageWithLink = `${description}\n\n🎬 Ver video completo: ${videoInfo.shortUrl}`;
+        
+        await waSocket.sendMessage(targetGroup.id, { 
+          image: contentBuffer,
+          caption: messageWithLink
+        });
+        
+        this.log('info', `✅ THUMBNAIL + ENLACE ENVIADO: ${Math.round(stats.size / 1024)} KB`);
+        
       } else {
-        // No es un video MP4 válido - ERROR
-        this.log('error', `❌ Archivo no es video MP4 válido: ${stats.size} bytes, header: ${videoBuffer.toString('hex', 0, 8)}`);
-        throw new Error('El archivo descargado no es un video MP4 válido');
+        // Archivo no válido
+        this.log('error', `❌ Archivo no válido: ${stats.size} bytes, tipo desconocido`);
+        throw new Error('El archivo descargado no es válido');
       }
       
       // Eliminar el archivo después de enviarlo

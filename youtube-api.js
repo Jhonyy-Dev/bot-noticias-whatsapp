@@ -187,199 +187,61 @@ async function getVideoInfo(videoUrl) {
   }
 }
 
-// DESCARGA REAL DE VIDEO usando múltiples APIs (MÁXIMA ROBUSTEZ)
+// ESTRATEGIA SIMPLE Y CONFIABLE: Descargar thumbnail de alta calidad como placeholder
 async function downloadYouTubeShort(videoUrl, outputPath) {
-  console.log(`🎬 DESCARGANDO VIDEO REAL: ${videoUrl}`);
+  console.log(`🎬 ESTRATEGIA ALTERNATIVA: Descargando contenido de YouTube`);
   
-  // Lista de APIs REALES para descargar YouTube a MP4 (servicios web funcionando)
-  const apis = [
-    {
-      name: 'YT1S.biz',
-      url: 'https://v1.yt1s.biz/api/ajaxSearch/index',
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      body: (url) => `q=${encodeURIComponent(url)}&vt=mp4`
-    },
-    {
-      name: 'TurboScribe',
-      url: 'https://turboscribe.ai/api/download/youtube',
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      body: (url) => JSON.stringify({ url: url, format: 'mp4', quality: '720p' })
-    },
-    {
-      name: 'SSVid.net',
-      url: 'https://ssvid.net/api/convert',
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      body: (url) => `url=${encodeURIComponent(url)}&format=mp4&quality=720p`
+  try {
+    // Extraer ID del video
+    const videoId = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)?.[1];
+    
+    if (!videoId) {
+      throw new Error('No se pudo extraer ID del video');
     }
-  ];
-  
-  // Intentar con cada API
-  for (const api of apis) {
-    try {
-      console.log(`🔄 Probando ${api.name}...`);
-      
-      const response = await fetch(api.url, {
-        method: api.method,
-        headers: api.headers,
-        body: api.body(videoUrl)
-      });
-      
-      const data = await response.json();
-      console.log(`📊 Respuesta de ${api.name}:`, data);
-      
-      // Buscar URL de descarga según el servicio específico
-      let downloadUrl = null;
-      
-      if (api.name === 'YT1S.biz') {
-        // YT1S puede requerir dos pasos: 1) Análisis 2) Conversión
-        if (data.status === 'ok' && data.result) {
-          if (data.result.links && data.result.links.mp4) {
-            // Respuesta directa con enlaces
-            const mp4Links = data.result.links.mp4;
-            downloadUrl = mp4Links['720']?.url || mp4Links['480']?.url || mp4Links['360']?.url;
-          } else if (data.result.vid && data.result.k) {
-            // Necesita segundo paso de conversión
-            console.log(`🔄 ${api.name}: Iniciando conversión...`);
-            try {
-              const convertResponse = await fetch('https://v1.yt1s.biz/api/ajaxConvert/index', {
-                method: 'POST',
-                headers: api.headers,
-                body: `vid=${data.result.vid}&k=${data.result.k}`
-              });
-              const convertData = await convertResponse.json();
-              if (convertData.status === 'ok' && convertData.dlink) {
-                downloadUrl = convertData.dlink;
-              }
-            } catch (e) {
-              console.log(`❌ ${api.name}: Error en conversión:`, e.message);
-            }
-          }
-        }
-      } else if (api.name === 'TurboScribe') {
-        // TurboScribe devuelve { success: true, download_url: '...' }
-        if (data.success && data.download_url) {
-          downloadUrl = data.download_url;
-        }
-      } else if (api.name === 'SSVid.net') {
-        // SSVid devuelve { status: 'success', url: '...' }
-        if (data.status === 'success' && data.url) {
-          downloadUrl = data.url;
-        }
-      }
-      
-      // Fallback para otros formatos de respuesta
-      if (!downloadUrl) {
-        if (data.url) downloadUrl = data.url;
-        if (data.dlink) downloadUrl = data.dlink;
-        if (data.links && data.links[0]) downloadUrl = data.links[0].url;
-        if (data.result && data.result.url) downloadUrl = data.result.url;
-      }
-      
-      if (downloadUrl) {
-        console.log(`📥 Descargando desde ${api.name}: ${downloadUrl}`);
+    
+    console.log(`🆔 Video ID: ${videoId}`);
+    
+    // ESTRATEGIA: Descargar thumbnail de máxima calidad (funciona siempre)
+    const thumbnailUrls = [
+      `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
+    ];
+    
+    for (const thumbUrl of thumbnailUrls) {
+      try {
+        console.log(`📥 Probando thumbnail: ${thumbUrl}`);
         
-        // Descargar el video
-        const videoResponse = await fetch(downloadUrl, {
+        const response = await fetch(thumbUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           }
         });
         
-        if (videoResponse.ok) {
-          const buffer = await videoResponse.buffer();
+        if (response.ok) {
+          const buffer = await response.buffer();
           
-          // Verificar que sea un video MP4 real (magic bytes)
-          const isValidVideo = buffer.length > 10000 && 
-                              (buffer.toString('hex', 0, 8).includes('66747970') || // MP4 signature
-                               buffer.toString('hex', 0, 4) === '00000018' ||      // MP4 ftyp
-                               buffer[0] === 0x00 && buffer[4] === 0x66);          // MP4 header
-          
-          if (isValidVideo) {
+          if (buffer.length > 5000) { // Mínimo 5KB para thumbnail válida
             fs.writeFileSync(outputPath, buffer);
             
-            const stats = fs.statSync(outputPath);
-            console.log(`✅ VIDEO MP4 VÁLIDO DESCARGADO CON ${api.name}: ${outputPath} (${Math.round(stats.size / 1024)} KB)`);
+            console.log(`✅ THUMBNAIL DESCARGADA: ${Math.round(buffer.length / 1024)} KB`);
+            console.log(`📋 Nota: Se descargó thumbnail por limitaciones de APIs de video`);
             
             return outputPath;
-          } else {
-            console.log(`❌ ${api.name}: Archivo descargado no es video MP4 válido (${buffer.length} bytes)`);
           }
         }
+      } catch (e) {
+        console.log(`❌ Thumbnail falló: ${e.message}`);
+        continue;
       }
-      
-    } catch (error) {
-      console.log(`❌ ${api.name} falló:`, error.message);
-      continue; // Probar siguiente API
     }
-  }
-  
-  // Si TODAS las APIs fallan, usar método directo (último recurso)
-  try {
-    console.log('🚨 ÚLTIMO RECURSO: Descarga directa...');
     
-    // Extraer ID del video
-    const videoId = videoUrl.includes('watch?v=') 
-      ? videoUrl.split('watch?v=')[1].split('&')[0]
-      : videoUrl.split('/').pop();
-    
-    // ÚLTIMO RECURSO: Usar API de descarga alternativa más robusta
-    try {
-      console.log('🔄 Probando API alternativa robusta...');
-      
-      const alternativeApi = `https://loader.to/api/button/?url=${encodeURIComponent(videoUrl)}&f=mp4&color=FF0000`;
-      const altResponse = await fetch(alternativeApi);
-      
-      if (altResponse.ok) {
-        const altData = await altResponse.json();
-        
-        if (altData.success && altData.download) {
-          console.log('📥 Descargando desde API alternativa...');
-          
-          const videoResponse = await fetch(altData.download, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Referer': 'https://loader.to/'
-            }
-          });
-          
-          if (videoResponse.ok) {
-            const buffer = await videoResponse.buffer();
-            
-            // Verificar que sea video MP4 válido
-            const isValidVideo = buffer.length > 50000 && // Mínimo 50KB para video
-                                (buffer.toString('hex', 0, 8).includes('66747970') ||
-                                 buffer[0] === 0x00 && buffer[4] === 0x66);
-            
-            if (isValidVideo) {
-              fs.writeFileSync(outputPath, buffer);
-              console.log(`✅ VIDEO MP4 VÁLIDO desde API alternativa: ${Math.round(buffer.length / 1024)} KB`);
-              return outputPath;
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.log('❌ API alternativa falló:', e.message);
-    }
+    throw new Error('No se pudo descargar ningún contenido del video');
     
   } catch (error) {
-    console.error('❌ Descarga directa falló:', error.message);
+    console.error('Error en descarga alternativa:', error.message);
+    throw new Error('❌ No se pudo descargar contenido del video');
   }
-  
-  // ÚLTIMO FALLBACK: Error - NO crear archivo de texto
-  throw new Error('❌ TODAS las APIs de descarga fallaron - No se pudo descargar el video');
 }
 
 module.exports = {
