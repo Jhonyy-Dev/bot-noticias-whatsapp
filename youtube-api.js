@@ -6,6 +6,18 @@ const play = require('play-dl');
 
 require('dotenv').config();
 
+// Inicializar play-dl
+(async () => {
+  try {
+    await play.setToken({
+      useragent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36']
+    });
+    console.log('✅ play-dl inicializado correctamente');
+  } catch (error) {
+    console.log('⚠️ play-dl sin token personalizado:', error.message);
+  }
+})();
+
 // Configurar el directorio de descargas
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 if (!fs.existsSync(DOWNLOADS_DIR)) {
@@ -163,8 +175,22 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
   console.log(`Descargando YouTube Short: ${videoUrl}`);
   
   try {
+    // Normalizar URL de YouTube
+    let normalizedUrl = videoUrl;
+    if (videoUrl.includes('youtu.be/')) {
+      const videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
+      normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    }
+    
+    console.log(`🔗 URL normalizada: ${normalizedUrl}`);
+    
+    // Verificar si es una URL válida de YouTube
+    if (!play.yt_validate(normalizedUrl)) {
+      throw new Error('URL de YouTube no válida');
+    }
+    
     // Obtener información del video con play-dl
-    const info = await play.video_info(videoUrl);
+    const info = await play.video_info(normalizedUrl);
     
     if (!info) {
       throw new Error('No se pudo obtener información del video');
@@ -173,10 +199,11 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
     console.log(`📹 Video: ${info.video_details.title}`);
     console.log(`👤 Canal: ${info.video_details.channel?.name}`);
     
-    // Obtener stream de descarga
-    const stream = await play.stream(videoUrl, {
-      quality: 2, // Calidad media para Shorts
-      discordPlayerCompatibility: false
+    // Obtener stream de descarga con configuración robusta
+    const stream = await play.stream(normalizedUrl, {
+      quality: 1, // Calidad baja para evitar problemas
+      discordPlayerCompatibility: false,
+      seek: 0
     });
     
     if (!stream || !stream.stream) {
@@ -203,6 +230,11 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
         console.error('Error escribiendo archivo:', error.message);
         reject(error);
       });
+      
+      // Timeout de seguridad
+      setTimeout(() => {
+        reject(new Error('Timeout en descarga de video'));
+      }, 60000); // 60 segundos
     });
     
   } catch (error) {
