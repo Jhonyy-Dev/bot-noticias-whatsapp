@@ -2,7 +2,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const YTDlpWrap = require('yt-dlp-wrap').default;
+// Ya no necesitamos librerías de descarga - enviaremos enlaces directos
 
 require('dotenv').config();
 
@@ -158,51 +158,48 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
   }
 }
 
-// Función para descargar un YouTube Short usando yt-dlp-wrap (LA MÁS ROBUSTA)
-async function downloadYouTubeShort(videoUrl, outputPath) {
-  console.log(`Descargando YouTube Short: ${videoUrl}`);
+// NUEVA ESTRATEGIA: No descargar videos, solo obtener información para enviar enlaces
+async function getVideoInfo(videoUrl) {
+  console.log(`📋 Obteniendo información del video: ${videoUrl}`);
   
   try {
-    // Crear instancia de yt-dlp
-    const ytDlpWrap = new YTDlpWrap();
+    // Extraer ID del video de la URL
+    const videoId = videoUrl.includes('watch?v=') 
+      ? videoUrl.split('watch?v=')[1].split('&')[0]
+      : videoUrl.split('/').pop();
     
-    // Configuración robusta para yt-dlp
-    const options = [
-      '--format=best[height<=720][ext=mp4]', // MP4, máximo 720p
-      '--no-playlist',
-      '--no-warnings',
-      '--extract-flat=false',
-      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-      '--referer=https://www.youtube.com/',
-      '--add-header=Accept-Language:en-US,en;q=0.9',
-      `--output=${outputPath}`
-    ];
+    console.log(`🆔 Video ID: ${videoId}`);
     
-    console.log(`🔗 Descargando: ${videoUrl}`);
-    console.log(`📁 Destino: ${outputPath}`);
+    // Crear información básica del video (sin descarga)
+    const videoInfo = {
+      url: videoUrl,
+      id: videoId,
+      thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      shortUrl: `https://youtu.be/${videoId}`
+    };
     
-    // Ejecutar descarga con yt-dlp
-    const result = await ytDlpWrap.execPromise([
-      videoUrl,
-      ...options
-    ]);
-    
-    console.log('📊 Resultado yt-dlp:', result);
-    
-    // Verificar si el archivo se descargó
-    if (!fs.existsSync(outputPath)) {
-      throw new Error('El archivo no se descargó correctamente');
-    }
-    
-    const stats = fs.statSync(outputPath);
-    console.log(`✅ Video descargado exitosamente: ${outputPath} (${Math.round(stats.size / 1024)} KB)`);
-    
-    return outputPath;
+    console.log(`✅ Información del video obtenida: ${videoInfo.shortUrl}`);
+    return videoInfo;
     
   } catch (error) {
-    console.error('Error con yt-dlp-wrap:', error.message);
-    throw new Error('Error al descargar el video');
+    console.error('Error obteniendo información del video:', error.message);
+    throw new Error('Error al procesar el video');
   }
+}
+
+// Función de compatibilidad (mantener el mismo nombre para no romper el código existente)
+async function downloadYouTubeShort(videoUrl, outputPath) {
+  console.log(`🔗 NUEVA ESTRATEGIA: Enviando enlace en lugar de descargar`);
+  
+  // Ya no descargamos, solo retornamos la URL para enviar como enlace
+  const videoInfo = await getVideoInfo(videoUrl);
+  
+  // Crear un archivo temporal con la URL (para compatibilidad)
+  const linkContent = `🎬 Video de YouTube:\n${videoInfo.shortUrl}\n\n📱 Toca el enlace para ver el video`;
+  fs.writeFileSync(outputPath, linkContent, 'utf8');
+  
+  console.log(`✅ Enlace preparado: ${videoInfo.shortUrl}`);
+  return outputPath;
 }
 
 module.exports = {

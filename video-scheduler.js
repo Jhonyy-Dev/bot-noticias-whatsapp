@@ -480,17 +480,18 @@ class VideoSchedulerService {
         selectedTopic
       );
       
-      // Leer el archivo
-      const videoBuffer = fs.readFileSync(outputPath);
+      // Leer el contenido del enlace (ya no es un video, es texto con URL)
+      const linkContent = fs.readFileSync(outputPath, 'utf8');
       
-      // Enviar el video al grupo
+      // Crear mensaje con enlace y descripción mejorada
+      const fullMessage = `${description}\n\n${linkContent}`;
+      
+      // Enviar mensaje de texto con enlace al grupo
       await waSocket.sendMessage(targetGroup.id, { 
-        video: videoBuffer,
-        caption: description,
-        gifPlayback: false
+        text: fullMessage
       });
       
-      this.log('info', '✅ Video enviado correctamente');
+      this.log('info', '✅ Enlace de video enviado correctamente');
       
       // Eliminar el archivo después de enviarlo
       fs.unlinkSync(outputPath);
