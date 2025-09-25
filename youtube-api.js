@@ -2,7 +2,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const youtubeDl = require('youtube-dl-exec');
+const ytdl = require('ytdl-core');
 
 require('dotenv').config();
 
@@ -158,23 +158,66 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
   }
 }
 
-// Función para descargar un YouTube Short usando youtube-dl-exec
+// Función para descargar un YouTube Short usando ytdl-core con configuración robusta
 async function downloadYouTubeShort(videoUrl, outputPath) {
   console.log(`Descargando YouTube Short: ${videoUrl}`);
   
   try {
-    const result = await youtubeDl(videoUrl, {
-      format: 'best[height<=720]',
-      noPlaylist: true,
-      output: outputPath,
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+    // Configuración robusta para evitar bloqueos
+    const info = await ytdl.getInfo(videoUrl, {
+      requestOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': '*/*',
+          'Sec-Fetch-Mode': 'navigate'
+        }
+      }
     });
-
-    console.log(`✅ Video descargado exitosamente: ${outputPath}`);
-    return outputPath;
+    
+    // Buscar formato de video más compatible
+    const format = ytdl.chooseFormat(info.formats, { 
+      quality: 'highestvideo',
+      filter: format => format.container === 'mp4' && format.hasVideo && format.hasAudio
+    }) || ytdl.chooseFormat(info.formats, { quality: 'highest' });
+    
+    if (!format) {
+      throw new Error('No se encontró un formato compatible');
+    }
+    
+    return new Promise((resolve, reject) => {
+      const stream = ytdl(videoUrl, { 
+        format: format,
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': '*/*'
+          }
+        }
+      });
+      
+      const writeStream = fs.createWriteStream(outputPath);
+      stream.pipe(writeStream);
+      
+      stream.on('error', (error) => {
+        console.error('Error en descarga:', error.message);
+        reject(new Error('Error al descargar el video'));
+      });
+      
+      writeStream.on('finish', () => {
+        console.log(`✅ Video descargado exitosamente: ${outputPath}`);
+        resolve(outputPath);
+      });
+      
+      writeStream.on('error', (error) => {
+        console.error('Error escribiendo archivo:', error.message);
+        reject(error);
+      });
+    });
     
   } catch (error) {
-    console.error('Error con youtube-dl-exec:', error.message);
+    console.error('Error con ytdl-core:', error.message);
     throw new Error('Error al descargar el video');
   }
 }
