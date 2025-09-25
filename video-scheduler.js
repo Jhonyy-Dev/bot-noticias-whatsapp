@@ -480,25 +480,29 @@ class VideoSchedulerService {
         selectedTopic
       );
       
-      // Verificar que el archivo existe y es un video real
+      // Verificar que el archivo existe y es un video MP4 real
       const stats = fs.statSync(outputPath);
-      const isVideoFile = stats.size > 10000; // Mínimo 10KB para ser un video válido
+      const videoBuffer = fs.readFileSync(outputPath);
       
-      if (isVideoFile) {
-        // Leer el video y enviarlo
-        const videoBuffer = fs.readFileSync(outputPath);
-        
+      // Validar que sea un video MP4 válido (magic bytes + tamaño)
+      const isValidMP4 = stats.size > 50000 && // Mínimo 50KB
+                         (videoBuffer.toString('hex', 0, 8).includes('66747970') || // MP4 signature
+                          videoBuffer.toString('hex', 0, 4) === '00000018' ||      // MP4 ftyp
+                          videoBuffer[0] === 0x00 && videoBuffer[4] === 0x66);     // MP4 header
+      
+      if (isValidMP4) {
+        // Enviar video MP4 válido
         await waSocket.sendMessage(targetGroup.id, { 
           video: videoBuffer,
           caption: description,
           gifPlayback: false
         });
         
-        this.log('info', `✅ VIDEO REAL DESCARGADO Y ENVIADO: ${Math.round(stats.size / 1024)} KB`);
+        this.log('info', `✅ VIDEO MP4 VÁLIDO ENVIADO: ${Math.round(stats.size / 1024)} KB`);
       } else {
-        // Archivo muy pequeño o no es video - ERROR
-        this.log('error', `❌ Archivo descargado no es un video válido: ${stats.size} bytes`);
-        throw new Error('El archivo descargado no es un video válido');
+        // No es un video MP4 válido - ERROR
+        this.log('error', `❌ Archivo no es video MP4 válido: ${stats.size} bytes, header: ${videoBuffer.toString('hex', 0, 8)}`);
+        throw new Error('El archivo descargado no es un video MP4 válido');
       }
       
       // Eliminar el archivo después de enviarlo

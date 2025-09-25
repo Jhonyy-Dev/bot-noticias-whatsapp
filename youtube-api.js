@@ -251,13 +251,21 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
         if (videoResponse.ok) {
           const buffer = await videoResponse.buffer();
           
-          if (buffer.length > 10000) { // Mínimo 10KB para ser un video válido
+          // Verificar que sea un video MP4 real (magic bytes)
+          const isValidVideo = buffer.length > 10000 && 
+                              (buffer.toString('hex', 0, 8).includes('66747970') || // MP4 signature
+                               buffer.toString('hex', 0, 4) === '00000018' ||      // MP4 ftyp
+                               buffer[0] === 0x00 && buffer[4] === 0x66);          // MP4 header
+          
+          if (isValidVideo) {
             fs.writeFileSync(outputPath, buffer);
             
             const stats = fs.statSync(outputPath);
-            console.log(`✅ VIDEO DESCARGADO CON ${api.name}: ${outputPath} (${Math.round(stats.size / 1024)} KB)`);
+            console.log(`✅ VIDEO MP4 VÁLIDO DESCARGADO CON ${api.name}: ${outputPath} (${Math.round(stats.size / 1024)} KB)`);
             
             return outputPath;
+          } else {
+            console.log(`❌ ${api.name}: Archivo descargado no es video MP4 válido (${buffer.length} bytes)`);
           }
         }
       }
@@ -277,26 +285,44 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
       ? videoUrl.split('watch?v=')[1].split('&')[0]
       : videoUrl.split('/').pop();
     
-    // Intentar descarga directa usando URLs conocidas de YouTube
-    const directUrls = [
-      `https://www.youtube.com/embed/${videoId}`,
-      `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` // Al menos la thumbnail
-    ];
-    
-    for (const directUrl of directUrls) {
-      try {
-        const response = await fetch(directUrl);
-        if (response.ok) {
-          const buffer = await response.buffer();
-          if (buffer.length > 1000) {
-            fs.writeFileSync(outputPath, buffer);
-            console.log(`✅ Descarga directa exitosa: ${Math.round(buffer.length / 1024)} KB`);
-            return outputPath;
+    // ÚLTIMO RECURSO: Usar API de descarga alternativa más robusta
+    try {
+      console.log('🔄 Probando API alternativa robusta...');
+      
+      const alternativeApi = `https://loader.to/api/button/?url=${encodeURIComponent(videoUrl)}&f=mp4&color=FF0000`;
+      const altResponse = await fetch(alternativeApi);
+      
+      if (altResponse.ok) {
+        const altData = await altResponse.json();
+        
+        if (altData.success && altData.download) {
+          console.log('📥 Descargando desde API alternativa...');
+          
+          const videoResponse = await fetch(altData.download, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Referer': 'https://loader.to/'
+            }
+          });
+          
+          if (videoResponse.ok) {
+            const buffer = await videoResponse.buffer();
+            
+            // Verificar que sea video MP4 válido
+            const isValidVideo = buffer.length > 50000 && // Mínimo 50KB para video
+                                (buffer.toString('hex', 0, 8).includes('66747970') ||
+                                 buffer[0] === 0x00 && buffer[4] === 0x66);
+            
+            if (isValidVideo) {
+              fs.writeFileSync(outputPath, buffer);
+              console.log(`✅ VIDEO MP4 VÁLIDO desde API alternativa: ${Math.round(buffer.length / 1024)} KB`);
+              return outputPath;
+            }
           }
         }
-      } catch (e) {
-        continue;
       }
+    } catch (e) {
+      console.log('❌ API alternativa falló:', e.message);
     }
     
   } catch (error) {
