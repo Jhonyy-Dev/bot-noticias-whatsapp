@@ -2,7 +2,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const ytdl = require('@distube/ytdl-core');
+const ytdl = require('ytdl-core');
 
 require('dotenv').config();
 
@@ -158,28 +158,19 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
   }
 }
 
-// Función para descargar un YouTube Short usando @distube/ytdl-core
+// Función para descargar un YouTube Short usando ytdl-core
 async function downloadYouTubeShort(videoUrl, outputPath) {
   console.log(`Descargando YouTube Short: ${videoUrl}`);
   
   try {
-    // Crear agente ytdl con configuración anti-detección actualizada
-    const agent = ytdl.createAgent([
-      {
-        "name": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "session": "VISITOR_INFO1_LIVE=Uq1IJ2vdggw; PREF=f4=4000000&tz=America.New_York; YSC=DyeND1wMuqw"
-      }
-    ]);
-    
-    const info = await ytdl.getInfo(videoUrl, { 
-      agent,
+    // Configuración simplificada para ytdl-core original
+    const info = await ytdl.getInfo(videoUrl, {
       requestOptions: {
         headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
           'Accept-Language': 'en-US,en;q=0.9',
           'Accept-Encoding': 'gzip, deflate, br',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
         }
       }
     });
@@ -196,14 +187,12 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
     return new Promise((resolve, reject) => {
       const stream = ytdl(videoUrl, { 
         format: format,
-        agent: agent,
         requestOptions: {
           headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
           }
         }
       });
@@ -228,7 +217,7 @@ async function downloadYouTubeShort(videoUrl, outputPath) {
     });
     
   } catch (error) {
-    console.error('Error con @distube/ytdl-core:', error.message);
+    console.error('Error con ytdl-core:', error.message);
     throw new Error('Error al descargar el video');
   }
 }
