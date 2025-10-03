@@ -42,7 +42,7 @@ Interfaz web moderna para QR, estado y envío manual:
 - ✅ Descarga confiable con `@distube/ytdl-core` y envío directo al grupo
 - ✅ Generación de descripción breve con Gemini AI (`gemini-ai.js`), con fallback inteligente
 - ✅ Conexión con WhatsApp (Baileys) y escaneo de QR desde interfaz web moderna
-- ✅ Envío automático cada 6 HORAS EXACTAS mediante `VideoSchedulerService`
+- ✅ Envío automático cada 12 HORAS EXACTAS mediante `VideoSchedulerService`
 - ✅ Envío manual desde la UI web
 - ✅ Servidor Express con endpoints para estado, QR, envío y logout (`modern-qr-server.js`)
 - ✅ Validación de configuración al inicio para evitar errores
@@ -149,7 +149,7 @@ curl -X POST http://localhost:3000/send-youtube-short
 
 ### Envíos automáticos (cron)
 
-Si configuras `SCHEDULE` en `.env`, el servidor programará envíos automáticos según la expresión cron. Ejemplo: `0 */6 * * *` (cada 6 horas).
+Si configuras `SCHEDULE` en `.env`, el servidor programará envíos automáticos según la expresión cron. Ejemplo: `0 */12 * * *` (cada 12 horas).
 
 **Importante**: El bot está configurado para enviar mensajes exclusivamente al grupo "Block". Asegúrate de:
 
@@ -224,10 +224,10 @@ Tabla rápida de endpoints:
 
 ## Configuración adicional
 
-El bot incluye **VideoSchedulerService** que maneja envíos automáticos cada **6 HORAS EXACTAS**.
+El bot incluye **VideoSchedulerService** que maneja envíos automáticos cada **12 HORAS EXACTAS**.
 
 **Características del scheduler**:
-- ✅ Intervalo fijo de 6 horas (no configurable para mantener consistencia)
+- ✅ Intervalo fijo de 12 horas (no configurable para mantener consistencia)
 - ✅ Persistencia en `video_schedule.json` para sobrevivir reinicios
 - ✅ Limpieza automática de registros antiguos (cada 24 horas)
 - ✅ Circuit breaker para manejo de errores repetidos
