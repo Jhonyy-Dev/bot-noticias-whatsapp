@@ -7,7 +7,7 @@ pnpm-debug.log*
 
 # WhatsApp Baileys (credenciales y estado de sesión)
 auth/
-
+.env
 # Descargas temporales de videos
 downloads/
 
