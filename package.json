@@ -23,9 +23,9 @@
     "express": "^4.21.2",
     "mime": "^4.0.7",
     "node-cron": "^3.0.3",
+    "node-fetch": "^2.7.0",
     "pino": "^8.16.2",
     "qrcode": "^1.5.4",
-    "qrcode-terminal": "^0.12.0",
-    "node-fetch": "^2.7.0"
+    "qrcode-terminal": "^0.12.0"
   }
 }

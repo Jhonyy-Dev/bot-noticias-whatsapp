@@ -10,7 +10,7 @@ require('dotenv').config();
 async function generateEnhancedDescription(videoInfo) {
   try {
     // Verificar si hay una API key configurada
-    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyBizcJ95cfJFN6n3VS8ktttE_KvF4zIqiQ';
+    const apiKey = process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
       console.log('No se encontró la API key de Gemini. Usando descripción predeterminada.');
@@ -83,7 +83,7 @@ async function generateEnhancedDescription(videoInfo) {
 async function analyzeVideoContent(videoDescription, topic = 'tecnología') {
   try {
     // Verificar si hay una API key configurada
-    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyBizcJ95cfJFN6n3VS8ktttE_KvF4zIqiQ';
+    const apiKey = process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
       console.log('No se encontró la API key de Gemini. Usando descripción predeterminada.');

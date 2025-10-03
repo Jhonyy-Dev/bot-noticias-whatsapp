@@ -1,9 +1,10 @@
-// LIBRERÍA ESPECIALIZADA PARA DESCARGAR VIDEOS REALES DE YOUTUBE
-// Múltiples métodos robustos para garantizar descarga de MP4
+// LIBRERÍA PARA DESCARGAR VIDEOS DE YOUTUBE
+// Usa múltiples métodos: API externa + ytdl-core
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const ytdl = require('@distube/ytdl-core');
+const axios = require('axios');
 
 class VideoDownloader {
   constructor() {
@@ -14,183 +15,6 @@ class VideoDownloader {
   ensureDownloadDir() {
     if (!fs.existsSync(this.downloadDir)) {
       fs.mkdirSync(this.downloadDir, { recursive: true });
-    }
-  }
-
-  // MÉTODO 1: Usar yt-dlp (el más robusto)
-  async downloadWithYtDlp(videoUrl, outputPath) {
-    console.log('🔄 Método 1: Probando yt-dlp...');
-    
-    try {
-      const command = `yt-dlp -f "best[height<=720][ext=mp4]" --no-playlist -o "${outputPath}" "${videoUrl}"`;
-      
-      execSync(command, { 
-        stdio: 'pipe',
-        timeout: 60000 // 60 segundos timeout
-      });
-      
-      if (fs.existsSync(outputPath)) {
-        const stats = fs.statSync(outputPath);
-        if (stats.size > 100000) { // Mínimo 100KB
-          console.log(`✅ yt-dlp: Video descargado (${Math.round(stats.size / 1024)} KB)`);
-          return true;
-        }
-      }
-      
-      return false;
-    } catch (error) {
-      console.log(`❌ yt-dlp falló: ${error.message}`);
-      return false;
-    }
-  }
-
-  // MÉTODO 2: Usar youtube-dl
-  async downloadWithYoutubeDl(videoUrl, outputPath) {
-    console.log('🔄 Método 2: Probando youtube-dl...');
-    
-    try {
-      const command = `youtube-dl -f "best[height<=720][ext=mp4]" --no-playlist -o "${outputPath}" "${videoUrl}"`;
-      
-      execSync(command, { 
-        stdio: 'pipe',
-        timeout: 60000
-      });
-      
-      if (fs.existsSync(outputPath)) {
-        const stats = fs.statSync(outputPath);
-        if (stats.size > 100000) {
-          console.log(`✅ youtube-dl: Video descargado (${Math.round(stats.size / 1024)} KB)`);
-          return true;
-        }
-      }
-      
-      return false;
-    } catch (error) {
-      console.log(`❌ youtube-dl falló: ${error.message}`);
-      return false;
-    }
-  }
-
-  // MÉTODO 3: Usar ffmpeg con URL directa
-  async downloadWithFfmpeg(videoUrl, outputPath) {
-    console.log('🔄 Método 3: Probando ffmpeg...');
-    
-    try {
-      const command = `ffmpeg -i "${videoUrl}" -c copy -t 60 "${outputPath}" -y`;
-      
-      execSync(command, { 
-        stdio: 'pipe',
-        timeout: 60000
-      });
-      
-      if (fs.existsSync(outputPath)) {
-        const stats = fs.statSync(outputPath);
-        if (stats.size > 100000) {
-          console.log(`✅ ffmpeg: Video descargado (${Math.round(stats.size / 1024)} KB)`);
-          return true;
-        }
-      }
-      
-      return false;
-    } catch (error) {
-      console.log(`❌ ffmpeg falló: ${error.message}`);
-      return false;
-    }
-  }
-
-  // MÉTODO 4: API externa robusta
-  async downloadWithAPI(videoUrl, outputPath) {
-    console.log('🔄 Método 4: Probando API externa...');
-    
-    try {
-      const fetch = require('node-fetch');
-      
-      // Usar API de descarga pública
-      const apiResponse = await fetch('https://api.vevioz.com/api/button/mp4/720', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ url: videoUrl })
-      });
-      
-      const data = await apiResponse.json();
-      
-      if (data.success && data.url) {
-        console.log('📥 Descargando desde API externa...');
-        
-        const videoResponse = await fetch(data.url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          }
-        });
-        
-        if (videoResponse.ok) {
-          const buffer = await videoResponse.buffer();
-          
-          // Validar que sea MP4 real
-          if (this.isValidMP4(buffer)) {
-            fs.writeFileSync(outputPath, buffer);
-            console.log(`✅ API externa: Video MP4 descargado (${Math.round(buffer.length / 1024)} KB)`);
-            return true;
-          }
-        }
-      }
-      
-      return false;
-    } catch (error) {
-      console.log(`❌ API externa falló: ${error.message}`);
-      return false;
-    }
-  }
-
-  // MÉTODO 5: Usar curl con extractor personalizado
-  async downloadWithCurl(videoUrl, outputPath) {
-    console.log('🔄 Método 5: Probando curl...');
-    
-    try {
-      // Extraer URL directa del video usando curl
-      const extractCommand = `curl -s "https://www.y2mate.com/mates/en68/analyze/ajax" ` +
-        `-H "Content-Type: application/x-www-form-urlencoded" ` +
-        `-d "k_query=${encodeURIComponent(videoUrl)}&k_page=home&hl=en&q_auto=0"`;
-      
-      const extractResult = execSync(extractCommand, { encoding: 'utf8', timeout: 30000 });
-      const extractData = JSON.parse(extractResult);
-      
-      if (extractData.status === 'ok' && extractData.result) {
-        // Buscar enlace de descarga MP4
-        const downloadKey = Object.keys(extractData.result).find(key => 
-          extractData.result[key].f === 'mp4' && extractData.result[key].q === '720p'
-        );
-        
-        if (downloadKey) {
-          const convertCommand = `curl -s "https://www.y2mate.com/mates/en68/convert" ` +
-            `-H "Content-Type: application/x-www-form-urlencoded" ` +
-            `-d "vid=${extractData.result.vid}&k=${downloadKey}"`;
-          
-          const convertResult = execSync(convertCommand, { encoding: 'utf8', timeout: 30000 });
-          const convertData = JSON.parse(convertResult);
-          
-          if (convertData.status === 'ok' && convertData.dlink) {
-            const downloadCommand = `curl -L "${convertData.dlink}" -o "${outputPath}" --max-time 60`;
-            execSync(downloadCommand, { timeout: 60000 });
-            
-            if (fs.existsSync(outputPath)) {
-              const stats = fs.statSync(outputPath);
-              if (stats.size > 100000) {
-                console.log(`✅ curl: Video descargado (${Math.round(stats.size / 1024)} KB)`);
-                return true;
-              }
-            }
-          }
-        }
-      }
-      
-      return false;
-    } catch (error) {
-      console.log(`❌ curl falló: ${error.message}`);
-      return false;
     }
   }
 
@@ -205,9 +29,110 @@ class VideoDownloader {
            (buffer[0] === 0x00 && buffer[4] === 0x66); // MP4 signature
   }
 
-  // FUNCIÓN PRINCIPAL: Probar todos los métodos hasta que uno funcione
+  // MÉTODO 1: Descargar usando yt-dlp portable (más confiable)
+  async downloadWithYtDlpPortable(videoUrl, outputPath) {
+    console.log('🔄 Método 1: Descargando con yt-dlp portable...');
+    
+    try {
+      const { exec } = require('child_process');
+      const util = require('util');
+      const execPromise = util.promisify(exec);
+      
+      // Intentar usar yt-dlp desde el sistema
+      console.log('📡 Descargando video con yt-dlp...');
+      
+      const command = `yt-dlp -f "best[height<=720][ext=mp4]/best[ext=mp4]/best" --no-playlist --no-warnings --quiet -o "${outputPath}" "${videoUrl}"`;
+      
+      await execPromise(command, {
+        timeout: 90000, // 90 segundos
+        maxBuffer: 50 * 1024 * 1024 // 50MB buffer
+      });
+      
+      if (fs.existsSync(outputPath)) {
+        const stats = fs.statSync(outputPath);
+        if (stats.size > 100000) {
+          console.log(`✅ yt-dlp: Video descargado (${Math.round(stats.size / 1024)} KB)`);
+          return outputPath;
+        } else {
+          throw new Error('Archivo descargado es demasiado pequeño');
+        }
+      } else {
+        throw new Error('El archivo no se creó');
+      }
+      
+    } catch (error) {
+      console.error(`❌ yt-dlp falló: ${error.message}`);
+      throw error;
+    }
+  }
+
+  // MÉTODO 2: Descargar con ytdl-core (respaldo)
+  async downloadWithYtdlCore(videoUrl, outputPath) {
+    console.log('🔄 Método 2: Descargando con ytdl-core...');
+    
+    try {
+      // Crear agente ytdl con configuración actualizada
+      const agent = ytdl.createAgent([
+        {
+          "name": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      ]);
+      
+      const info = await ytdl.getInfo(videoUrl, { agent });
+      
+      const format = ytdl.chooseFormat(info.formats, { 
+        quality: 'highest',
+        filter: 'audioandvideo'
+      });
+      
+      if (!format) {
+        throw new Error('No se encontró un formato adecuado');
+      }
+      
+      return new Promise((resolve, reject) => {
+        const stream = ytdl(videoUrl, { 
+          format: format,
+          agent: agent
+        });
+        const writeStream = fs.createWriteStream(outputPath);
+        
+        stream.pipe(writeStream);
+        
+        stream.on('error', (error) => {
+          console.error('❌ Error en el stream de descarga:', error.message);
+          reject(error);
+        });
+        
+        writeStream.on('finish', () => {
+          // Verificar que el archivo se descargó correctamente
+          if (fs.existsSync(outputPath)) {
+            const stats = fs.statSync(outputPath);
+            if (stats.size > 100000) { // Mínimo 100KB
+              console.log(`✅ ytdl-core: Video descargado (${Math.round(stats.size / 1024)} KB)`);
+              resolve(outputPath);
+            } else {
+              reject(new Error('Archivo descargado es demasiado pequeño'));
+            }
+          } else {
+            reject(new Error('Archivo no se creó'));
+          }
+        });
+        
+        writeStream.on('error', (error) => {
+          console.error('❌ Error escribiendo archivo:', error.message);
+          reject(error);
+        });
+      });
+      
+    } catch (error) {
+      console.error(`❌ ytdl-core falló: ${error.message}`);
+      throw error;
+    }
+  }
+
+  // FUNCIÓN PRINCIPAL: Descargar video con múltiples métodos
   async downloadVideo(videoUrl, outputFilename = null) {
-    console.log(`🎬 INICIANDO DESCARGA REAL DE VIDEO: ${videoUrl}`);
+    console.log(`🎬 INICIANDO DESCARGA DE VIDEO: ${videoUrl}`);
     
     const videoId = this.extractVideoId(videoUrl);
     if (!videoId) {
@@ -222,37 +147,35 @@ class VideoDownloader {
       fs.unlinkSync(outputPath);
     }
     
-    // PROBAR MÉTODOS EN ORDEN DE ROBUSTEZ
+    // Probar métodos en orden
     const methods = [
-      () => this.downloadWithYtDlp(videoUrl, outputPath),
-      () => this.downloadWithYoutubeDl(videoUrl, outputPath),
-      () => this.downloadWithAPI(videoUrl, outputPath),
-      () => this.downloadWithCurl(videoUrl, outputPath),
-      () => this.downloadWithFfmpeg(videoUrl, outputPath)
+      { name: 'yt-dlp', fn: () => this.downloadWithYtDlpPortable(videoUrl, outputPath) },
+      { name: 'ytdl-core', fn: () => this.downloadWithYtdlCore(videoUrl, outputPath) }
     ];
     
-    for (let i = 0; i < methods.length; i++) {
+    for (const method of methods) {
       try {
-        const success = await methods[i]();
-        if (success) {
-          // Validación final
-          if (fs.existsSync(outputPath)) {
-            const buffer = fs.readFileSync(outputPath);
-            if (this.isValidMP4(buffer)) {
-              console.log(`🎉 ¡VIDEO MP4 REAL DESCARGADO EXITOSAMENTE!`);
-              return outputPath;
-            } else {
-              console.log(`❌ Método ${i+1}: Archivo no es MP4 válido`);
-              fs.unlinkSync(outputPath);
-            }
+        console.log(`\n🔄 Probando método: ${method.name}`);
+        const downloadedPath = await method.fn();
+        
+        // Validación final
+        if (fs.existsSync(downloadedPath)) {
+          const buffer = fs.readFileSync(downloadedPath);
+          if (this.isValidMP4(buffer)) {
+            console.log(`🎉 ¡VIDEO MP4 DESCARGADO EXITOSAMENTE CON ${method.name}!`);
+            return downloadedPath;
+          } else {
+            console.log(`❌ ${method.name}: Archivo no es MP4 válido`);
+            fs.unlinkSync(downloadedPath);
           }
         }
       } catch (error) {
-        console.log(`❌ Método ${i+1} falló: ${error.message}`);
+        console.error(`❌ ${method.name} falló: ${error.message}`);
+        // Continuar con el siguiente método
       }
     }
     
-    throw new Error('❌ TODOS LOS MÉTODOS DE DESCARGA FALLARON - No se pudo descargar video real');
+    throw new Error('❌ TODOS LOS MÉTODOS DE DESCARGA FALLARON');
   }
 
   extractVideoId(url) {

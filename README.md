@@ -36,14 +36,16 @@ Interfaz web moderna para QR, estado y envío manual:
 
 ## Características
 
-- Búsqueda de YouTube Shorts por temas usando YouTube Data API v3 (`youtube-api.js`)
-- Filtro anti-repetición de canales: nunca envía dos videos seguidos del mismo `channelId`
-- Rotación secuencial de temas (no aleatoria) definida en `.env` (`YOUTUBE_TOPIC`)
-- Descarga del Short con `@distube/ytdl-core` y envío directo al grupo
-- Generación de descripción breve con Gemini AI (`gemini-ai.js`), con fallback inteligente
-- Conexión con WhatsApp (Baileys) y escaneo de QR desde interfaz web moderna
-- Envío manual desde la UI y envíos automáticos por `cron` (variable `SCHEDULE`)
-- Servidor Express con endpoints para estado, QR, envío y logout (`modern-qr-server.js`)
+- ✅ Búsqueda de YouTube Shorts por temas usando YouTube Data API v3 (`youtube-api.js`)
+- ✅ Filtro anti-repetición: nunca envía videos repetidos (memoria de 50 videos y 10 canales)
+- ✅ Rotación secuencial de temas (circular, predecible) definida en `.env` (`YOUTUBE_TOPIC`)
+- ✅ Descarga confiable con `@distube/ytdl-core` y envío directo al grupo
+- ✅ Generación de descripción breve con Gemini AI (`gemini-ai.js`), con fallback inteligente
+- ✅ Conexión con WhatsApp (Baileys) y escaneo de QR desde interfaz web moderna
+- ✅ Envío automático cada 6 HORAS EXACTAS mediante `VideoSchedulerService`
+- ✅ Envío manual desde la UI web
+- ✅ Servidor Express con endpoints para estado, QR, envío y logout (`modern-qr-server.js`)
+- ✅ Validación de configuración al inicio para evitar errores
 
 ## Requisitos
 
@@ -82,11 +84,10 @@ Variables del archivo `.env`:
 
 | Variable               | Tipo     | Ejemplo/Default                                                                 | Descripción                                                                                          |
 |------------------------|----------|----------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
-| `YOUTUBE_TOPIC`        | string   | `tips de programación,desarrollo de software,...`                                | Lista separada por comas. Define el orden de rotación SECuencial de temas.                           |
-| `YOUTUBE_API_KEY`      | string   | `AIza...`                                                                         | API Key de YouTube Data API v3 para búsquedas de Shorts.                                             |
-| `GEMINI_API_KEY`       | string   | `AIza...`                                                                         | API Key de Gemini para generar descripciones breves. Opcional: si falta, se aplica fallback.         |
-| `TARGET_GROUP_NAME`    | string   | `Block`                                                                            | Nombre (o parte del nombre) del grupo de WhatsApp receptor.                                           |
-| `SCHEDULE`             | cron     | `0 */3 * * *`                                                                      | Expresión cron para envíos automáticos. Dejar vacío para desactivar.                                 |
+| `YOUTUBE_TOPIC`        | string   | `tips de programación,desarrollo de software,...`                                | **OBLIGATORIO**. Lista separada por comas. Define el orden de rotación secuencial de temas.          |
+| `YOUTUBE_API_KEY`      | string   | `AIza...`                                                                         | **OBLIGATORIO**. API Key de YouTube Data API v3 para búsquedas de Shorts.                            |
+| `GEMINI_API_KEY`       | string   | `AIza...`                                                                         | **OBLIGATORIO**. API Key de Gemini para generar descripciones breves.                                |
+| `TARGET_GROUP_NAME`    | string   | `Club Dev Maval`                                                                  | **OBLIGATORIO**. Nombre (o parte del nombre) del grupo de WhatsApp receptor.                         |
 | `MAX_VIDEOS_TO_FETCH`  | number   | `100`                                                                              | Límite de resultados por búsqueda en YouTube.                                                        |
 
 Notas técnicas:
@@ -205,27 +206,37 @@ Tabla rápida de endpoints:
 
 ## Anti-repetición y rotación de temas
 
-- Rotación secuencial (no aleatoria) de temas desde `.env` → `YOUTUBE_TOPIC`:
+- **Rotación secuencial circular** de temas desde `.env` → `YOUTUBE_TOPIC`:
   1. tips de programación
   2. desarrollo de software
   3. desarrollo web
   4. noticia ciberseguridad
-  5. noticia inteligencia artificial
-  6. tecnología china 2025
-  7. noticia IA
-  8. hacking con IA
+  
+  El bot recorre los temas en orden (1 → 2 → 3 → 4 → 1...), sin saltos aleatorios.
 
-- El índice global `currentTopicIndex` avanza en cada envío y vuelve al inicio al llegar al final (rotación circular).
-- Política de canales: prioridad ABSOLUTA a no repetir `channelId` consecutivamente. Solo se relaja si no existen canales nuevos tras varios intentos y temas de respaldo.
+- El índice global `currentTopicIndex` avanza automáticamente en cada envío y vuelve al inicio al llegar al final.
+- **Sistema anti-repetición estricto**:
+  - Memoria de **50 videos** enviados recientemente
+  - Memoria de **10 canales** usados recientemente
+  - Prioridad ABSOLUTA: NO repetir videos ya enviados
+  - Prioridad ALTA: Evitar canales ya usados consecutivamente
+- Si no hay videos nuevos disponibles, el bot rechaza el envío (no envía repetidos).
 
 ## Configuración adicional
 
- El bot ya incluye programación de tareas con `node-cron`. Modifica la frecuencia de envío en `.env` con `SCHEDULE` (formato cron).
+El bot incluye **VideoSchedulerService** que maneja envíos automáticos cada **6 HORAS EXACTAS**.
 
-Consideraciones:
-- La rotación secuencial de temas se maneja con una variable global (`currentTopicIndex`) para asegurar orden fijo y circular.
-- Se mantiene memoria de últimos videos y canales enviados para evitar repeticiones (`sentVideos`, `sentChannels`).
-- En última instancia, si no hay canales nuevos disponibles, se aplican estrategias de respaldo documentadas en `modern-qr-server.js`.
+**Características del scheduler**:
+- ✅ Intervalo fijo de 6 horas (no configurable para mantener consistencia)
+- ✅ Persistencia en `video_schedule.json` para sobrevivir reinicios
+- ✅ Limpieza automática de registros antiguos (cada 24 horas)
+- ✅ Circuit breaker para manejo de errores repetidos
+- ✅ Verificación cada 15 minutos para enviar cuando corresponda
+
+**Consideraciones**:
+- La rotación secuencial de temas se maneja con `currentTopicIndex` para asegurar orden circular
+- Memoria de últimos 50 videos y 10 canales enviados
+- Si no hay videos nuevos, el bot rechaza el envío (no envía repetidos)
 
 ## Solución de problemas
 

@@ -12,6 +12,46 @@ const { videoScheduler, getSchedulerStatus } = require('./video-scheduler');
 
 require('dotenv').config();
 
+// Validar configuración crítica al inicio
+function validateConfiguration() {
+  const requiredVars = {
+    'YOUTUBE_API_KEY': process.env.YOUTUBE_API_KEY,
+    'GEMINI_API_KEY': process.env.GEMINI_API_KEY,
+    'TARGET_GROUP_NAME': process.env.TARGET_GROUP_NAME,
+    'YOUTUBE_TOPIC': process.env.YOUTUBE_TOPIC
+  };
+
+  const missing = [];
+  const warnings = [];
+
+  for (const [key, value] of Object.entries(requiredVars)) {
+    if (!value || value.trim() === '') {
+      missing.push(key);
+    }
+  }
+
+  if (missing.length > 0) {
+    console.error('❌ ERROR CRÍTICO: Faltan variables de entorno obligatorias:');
+    missing.forEach(key => console.error(`   - ${key}`));
+    console.error('\n📝 Configura estas variables en el archivo .env');
+    process.exit(1);
+  }
+
+  // Validar formato de YOUTUBE_TOPIC
+  const topics = process.env.YOUTUBE_TOPIC.split(',').map(t => t.trim()).filter(t => t);
+  if (topics.length === 0) {
+    console.error('❌ ERROR: YOUTUBE_TOPIC debe contener al menos un tema');
+    process.exit(1);
+  }
+
+  console.log('✅ Configuración validada correctamente');
+  console.log(`📋 Temas configurados (${topics.length}): ${topics.join(', ')}`);
+  console.log(`🎯 Grupo objetivo: ${process.env.TARGET_GROUP_NAME}`);
+}
+
+// Ejecutar validación al inicio
+validateConfiguration();
+
 // Función para limpiar archivos de autenticación
 function cleanAuthFiles() {
   const authPath = path.join(__dirname, 'auth');
@@ -434,10 +474,12 @@ async function sendYouTubeShort() {
 
     const availableTopics = topicsFromEnv.split(',').map(topic => topic.trim());
     
-    // Seleccionar tema ALEATORIO para evitar repetición
-    const randomTopicIndex = Math.floor(Math.random() * availableTopics.length);
-    const currentTopic = availableTopics[randomTopicIndex];
-    console.log(`🎲 Tema ALEATORIO seleccionado: ${currentTopic}`);
+    // Seleccionar tema SECUENCIAL (rotación circular)
+    const currentTopic = availableTopics[currentTopicIndex];
+    console.log(`🎯 Tema secuencial [${currentTopicIndex + 1}/${availableTopics.length}]: ${currentTopic}`);
+    
+    // Avanzar al siguiente tema para el próximo envío
+    currentTopicIndex = (currentTopicIndex + 1) % availableTopics.length;
 
     let video = null;
     let allFoundVideos = [];
@@ -565,11 +607,25 @@ async function sendYouTubeShort() {
       console.log(`⚠️ ADVERTENCIA: Canal ${video.channelId} ya fue usado recientemente, pero permitiendo video nuevo del mismo canal.`);
     }
 
-    console.log(`Descargando video: ${video.url}`);
+    console.log(`📥 Descargando video: ${video.url}`);
     const outputPath = path.join(__dirname, 'downloads', `${video.id}.mp4`);
-    await downloadYouTubeShort(video.url, outputPath);
-    if (!outputPath || !fs.existsSync(outputPath)) {
-      throw new Error('Error al descargar el video');
+    
+    try {
+      await downloadYouTubeShort(video.url, outputPath);
+      
+      if (!fs.existsSync(outputPath)) {
+        throw new Error('El archivo de video no se creó');
+      }
+      
+      const stats = fs.statSync(outputPath);
+      if (stats.size < 10000) {
+        throw new Error('El archivo descargado es demasiado pequeño');
+      }
+      
+      console.log(`✅ Video descargado correctamente: ${Math.round(stats.size / 1024)} KB`);
+    } catch (downloadError) {
+      console.error(`❌ Error descargando video: ${downloadError.message}`);
+      throw new Error(`No se pudo descargar el video: ${downloadError.message}`);
     }
 
     // Generar descripción mejorada con Gemini AI

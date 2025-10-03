@@ -506,7 +506,7 @@ class VideoSchedulerService {
       
       return {
         status: 'active',
-        strictMode: 'EXACTLY_3_HOURS',
+        strictMode: 'EXACTLY_6_HOURS',
         groupId,
         canSend: canSendResult.canSend,
         reason: canSendResult.reason,
@@ -562,7 +562,7 @@ const videoScheduler = new VideoSchedulerService();
 // Funciones de debugging
 async function getSchedulerStatus() {
   const status = await videoScheduler.getStatus();
-  console.log('=== VIDEO SCHEDULER STATUS - 3 HOUR INTERVALS ===');
+  console.log('=== VIDEO SCHEDULER STATUS - 6 HOUR INTERVALS ===');
   console.log(JSON.stringify(status, null, 2));
   return status;
 }
