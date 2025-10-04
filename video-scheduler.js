@@ -79,13 +79,13 @@ class VideoSchedulerService {
 
       // Verificar si necesita limpieza (cada 24 horas)
       const lastCleanupTime = schedule._metadata?.lastCleanup || 0;
-      const timeSinceLastCleanup = now - lastCleanupTime;
+      const timeSinceLastCleanup = lastCleanupTime === 0 ? this.CLEANUP_INTERVAL : (now - lastCleanupTime);
 
       if (timeSinceLastCleanup >= this.CLEANUP_INTERVAL) {
         cleanupNeeded = true;
         this.log('info', 'Starting automatic cleanup of old entries', {
-          lastCleanup: lastCleanupTime ? new Date(lastCleanupTime).toISOString() : 'Never',
-          hoursSinceLastCleanup: Math.round(timeSinceLastCleanup / (1000 * 60 * 60))
+          lastCleanup: lastCleanupTime === 0 ? 'Never' : new Date(lastCleanupTime).toISOString(),
+          hoursSinceLastCleanup: lastCleanupTime === 0 ? 0 : Math.round(timeSinceLastCleanup / (1000 * 60 * 60))
         });
 
         // Limpiar entradas antiguas (más de 7 días)
@@ -137,12 +137,8 @@ class VideoSchedulerService {
   }
 
   startCleanupScheduler() {
-    // Ejecutar limpieza inicial después de 1 minuto
-    setTimeout(async () => {
-      await this.cleanupOldEntries();
-    }, 60 * 1000);
-
-    // Programar limpieza automática cada 24 horas
+    // Programar limpieza automática cada 24 horas (NO ejecutar inmediatamente)
+    // El cleanup se ejecutará cuando realmente lo necesite (cada 24 horas)
     setInterval(async () => {
       try {
         await this.cleanupOldEntries();
