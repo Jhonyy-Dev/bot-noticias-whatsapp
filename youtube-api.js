@@ -27,7 +27,10 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
   try {
     // 1. BUSCAR con YouTube Data API v3
     console.log(`Consultando YouTube API para: ${topic}`);
-    // Probar múltiples variaciones de búsqueda
+    // OPTIMIZADO PARA 12 HORAS: 5 búsquedas variadas
+    // Con envío cada 12 horas (2x/día): 5 búsquedas × 100 = 500 unidades por envío
+    // Consumo diario: 2 envíos × 500 = 1,000 unidades/día (10% de la cuota)
+    // Es IMPOSIBLE agotar 10,000 unidades con solo 2 envíos diarios
     const searchQueries = [
       `${topic} español`,
       `${topic} spanish`,
@@ -47,7 +50,7 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
             q: query,
             type: 'video',
             videoDuration: 'short',
-            maxResults: Math.min(maxResults * 2, 20),
+            maxResults: 50, // Aumentado para obtener más resultados con menos búsquedas
             order: 'date',
             regionCode: 'ES',
             relevanceLanguage: 'es',
@@ -59,7 +62,6 @@ async function searchYouTubeShorts(topic, maxResults = 5) {
         if (response.data.items && response.data.items.length > 0) {
           console.log(`✅ Encontrados ${response.data.items.length} videos con: "${query}"`);
           allVideos.push(...response.data.items);
-          if (allVideos.length >= maxResults) break;
         }
       } catch (queryError) {
         console.log(`⚠️ Error con búsqueda "${query}": ${queryError.message}`);
